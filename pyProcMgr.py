@@ -27,38 +27,36 @@ procList = []
 def launchProcess( command, procNumber=1, verbose=False ):
     # No I/O supported for these processes
     # devnull = os.devnull
-    procEnv = {}
+    procEnv = os.environ
     procEnv['PYPROC_ID'] = str(procNumber)
     devnull = subprocess.DEVNULL
+    procCmd = [ '/afs/slac/g/lcls/epics/extensions/R0.4.0/bin/rhel6-x86_64/procServ', str(40000 + procNumber) ]
     cmdArgs = ' '.join(command).split()
     if verbose:
         print( "launchProcess: %s\n" % cmdArgs )
     procInput = tempfile.TemporaryFile( mode='w+' )
     #procInput = subprocess.PIPE
     procCreationFlags = 0
-    if hasattr( subprocess, "CREATE_NEW_CONSOLE" ):
-        procCreationFlags = subprocess.CREATE_NEW_CONSOLE
-    if hasattr( subprocess, "DETACHED_PROCESS" ):
-        procCreationFlags = subprocess.DETACHED_PROCESS
     proc = None
     testInput = "date >> /tmp/pyproc_%d.log\n" % procNumber
     try:
         if hasattr(procInput,"write"):
             procInput.write( testInput )
-        proc = subprocess.Popen(	cmdArgs, stdin=procInput, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    env=procEnv, creationflags=procCreationFlags,
-                                    shell=True, executable="/bin/bash", universal_newlines=True )
+        proc = subprocess.Popen(	procCmd + cmdArgs, stdin=procInput, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    env=procEnv, universal_newlines=True )
         if verbose:
             print( "Launched PID: %d" % proc.pid )
-        (procOut,procErr) = proc.communicate( testInput )
-        proc.poll()
-        time.sleep(1)
-        if hasattr( proc.stdin, "write" ):
-            proc.stdin.write( testInput )
-        elif hasattr(procInput,"closed") and not procInput.closed:
-            procInput.write( testInput )
-        proc.poll()
-        (procOut,procErr) = proc.communicate( testInput )
+        #proc.poll()
+        #time.sleep(1)
+        #(procOut,procErr) = proc.communicate( testInput )
+        #time.sleep(1)
+        #if hasattr( proc.stdin, "write" ):
+        #	proc.stdin.write( testInput )
+        #elif hasattr(procInput,"closed") and not procInput.closed:
+        #	procInput.write( testInput )
+        #proc.poll()
+        #time.sleep(1)
+        #(procOut,procErr) = proc.communicate( testInput )
     except ValueError as e:
         print( "launchProcess: ValueError" )
         print( e )
