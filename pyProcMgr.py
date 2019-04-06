@@ -13,11 +13,8 @@ import sys
 import os
 import io
 import locale
-#import socket
 import subprocess
 import argparse
-#import readline
-#import shutil
 import tempfile
 import textwrap
 import time
@@ -25,38 +22,22 @@ import time
 procList = []
 
 def launchProcess( command, procNumber=1, verbose=False ):
-    # No I/O supported for these processes
-    # devnull = os.devnull
+    # No I/O supported or collected for these processes
     procEnv = os.environ
     procEnv['PYPROC_ID'] = str(procNumber)
     devnull = subprocess.DEVNULL
-    procCmd = [ '/afs/slac/g/lcls/epics/extensions/R0.4.0/bin/rhel6-x86_64/procServ', str(40000 + procNumber) ]
+    procName = "pyProc_%d" % procNumber
+    procServExe = '/afs/slac/g/lcls/epics/extensions/R0.4.0/bin/rhel6-x86_64/procServ'
+    procCmd = [ procServExe, '-f', '--name', procName, str(40000 + procNumber) ]
     cmdArgs = ' '.join(command).split()
     if verbose:
         print( "launchProcess: %s\n" % cmdArgs )
-    procInput = tempfile.TemporaryFile( mode='w+' )
-    #procInput = subprocess.PIPE
-    procCreationFlags = 0
     proc = None
-    testInput = "date >> /tmp/pyproc_%d.log\n" % procNumber
     try:
-        if hasattr(procInput,"write"):
-            procInput.write( testInput )
-        proc = subprocess.Popen(	procCmd + cmdArgs, stdin=procInput, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        proc = subprocess.Popen(	procCmd + cmdArgs, stdin=devnull, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     env=procEnv, universal_newlines=True )
         if verbose:
             print( "Launched PID: %d" % proc.pid )
-        #proc.poll()
-        #time.sleep(1)
-        #(procOut,procErr) = proc.communicate( testInput )
-        #time.sleep(1)
-        #if hasattr( proc.stdin, "write" ):
-        #	proc.stdin.write( testInput )
-        #elif hasattr(procInput,"closed") and not procInput.closed:
-        #	procInput.write( testInput )
-        #proc.poll()
-        #time.sleep(1)
-        #(procOut,procErr) = proc.communicate( testInput )
     except ValueError as e:
         print( "launchProcess: ValueError" )
         print( e )
@@ -73,14 +54,11 @@ def launchProcess( command, procNumber=1, verbose=False ):
         print( "Unknown exception thrown" )
         print( e )
         pass
-    if verbose and proc is not None:
-        print( "Returning proc w/ PID: %d" % proc.pid )
     return ( proc, proc.stdin )
 
 def killProcess( proc, verbose=False ):
     if verbose:
         print( "killProcess: %d\n" % proc.pid )
-    #proc.signal( os.sigKILL )
     proc.kill()
 
 def process_options(argv):
@@ -108,9 +86,7 @@ def main(argv=None):
     options = process_options(argv)
     args = ' '.join( options.arg )
     if options.verbose:
-        print( "Cmd:  %s" % options.cmd )
-        print( "Args: %s" % options.arg )
-        print( "Full: %s %s" % ( options.cmd, args ) )
+        print( "Full Cmd: %s %s" % ( options.cmd, args ) )
 
     try:
         ( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg, verbose=options.verbose )
@@ -131,7 +107,8 @@ if __name__ == '__main__':
     status = 0
     try:
         status = main()
-    except:
+    except BaseException as e:
+        print( e )
         pass
 
     for procPair in procList:
