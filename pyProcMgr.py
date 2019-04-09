@@ -26,6 +26,7 @@ procList = []
 macroRefRegExp      = re.compile( r"^(.*)\$([a-zA-Z0-9_]+)(.*)$" )
 
 def expandMacros( strWithMacros, macroDict ):
+    global macroRefRegExp
     if type(strWithMacros) is list:
         expandedStrList = []
         for unexpandedStr in strWithMacros:
@@ -87,7 +88,7 @@ def launchProcess( command, procNumber=1, verbose=False ):
 
 def killProcess( proc, verbose=False ):
     if verbose:
-        print( "killProcess: %d\n" % proc.pid )
+        print( "killProcess: %d" % proc.pid )
     proc.kill()
 
 def process_options(argv):
@@ -103,7 +104,7 @@ def process_options(argv):
     parser = argparse.ArgumentParser( description=description, formatter_class=argparse.RawDescriptionHelpFormatter, epilog=epilog )
     parser.add_argument( 'cmd',  help='Command to launch.  Should be an executable file.' )
     parser.add_argument( 'arg', nargs='*', help='Arguments for command line. Enclose options in quotes.' )
-    parser.add_argument( '-c', '--count',  action="store", default=1, help='Number of processes to launch.' )
+    parser.add_argument( '-c', '--count',  action="store", type=int, default=1, help='Number of processes to launch.' )
     parser.add_argument( '-v', '--verbose',  action="store_true", help='show more verbose output.' )
 
     options = parser.parse_args( )
@@ -117,12 +118,15 @@ def main(argv=None):
     #if options.verbose:
     #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
 
-    try:
-        ( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg, verbose=options.verbose )
-        if proc is not None:
-            procList.append( [ proc, procInput ] )
-    except:
-        pass
+    procNumber = 1
+    for procNumber in list(range(options.count)):
+        procNumber = procNumber + 1
+        try:
+            ( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg, procNumber=procNumber, verbose=options.verbose )
+            if proc is not None:
+                procList.append( [ proc, procInput ] )
+        except:
+            pass
 
     time.sleep(1)
     print( "Waiting for %d processes:" % len(procList) )
