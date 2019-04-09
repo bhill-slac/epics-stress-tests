@@ -31,13 +31,13 @@ def launchProcess( command, procNumber=1, verbose=False ):
     procCmd = [ procServExe, '-f', '--name', procName, str(40000 + procNumber) ]
     cmdArgs = ' '.join(command).split()
     if verbose:
-        print( "launchProcess: %s\n" % cmdArgs )
+        print( "launchProcess: %s\n" % ' '.join(cmdArgs) )
     proc = None
     try:
         proc = subprocess.Popen(	procCmd + cmdArgs, stdin=devnull, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     env=procEnv, universal_newlines=True )
         if verbose:
-            print( "Launched PID: %d" % proc.pid )
+            print( "Launched %s with PID %d" % ( procName, proc.pid ) )
     except ValueError as e:
         print( "launchProcess: ValueError" )
         print( e )
@@ -85,8 +85,8 @@ def main(argv=None):
     global procList
     options = process_options(argv)
     args = ' '.join( options.arg )
-    if options.verbose:
-        print( "Full Cmd: %s %s" % ( options.cmd, args ) )
+    #if options.verbose:
+    #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
 
     try:
         ( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg, verbose=options.verbose )
