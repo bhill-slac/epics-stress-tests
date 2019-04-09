@@ -9,25 +9,54 @@
 #
 #==============================================================
 from __future__ import print_function
-import sys
-import os
+import argparse
 import io
 import locale
+import os
+import re
 import subprocess
-import argparse
+import sys
 import tempfile
 import textwrap
 import time
 
 procList = []
 
+# Pre-compile regular expressions for speed
+macroRefRegExp      = re.compile( r"^(.*)\$([a-zA-Z0-9_]+)(.*)$" )
+
+def expandMacros( strWithMacros, macroDict ):
+    if type(strWithMacros) is list:
+        expandedStrList = []
+        for unexpandedStr in strWithMacros:
+            expandedStr = expandMacros( unexpandedStr, macroDict )
+            expandedStrList += [ expandedStr ]
+        return expandedStrList
+
+    while True:
+        macroMatch = macroRefRegExp.search( strWithMacros )
+        if not macroMatch:
+            break
+        macroName = macroMatch.group(2)
+        if macroName in macroDict:
+            # Expand this macro and continue
+            strWithMacros = macroMatch.group(1) + macroDict[macroName] + macroMatch.group(3)
+            continue
+        # Check for other macros in the string
+        return macroMatch.group(1) + '$' + macroMatch.group(2) + expandMacros( macroMatch.group(3), macroDict )
+    return strWithMacros
+
 def launchProcess( command, procNumber=1, verbose=False ):
     # No I/O supported or collected for these processes
     procEnv = os.environ
     procEnv['PYPROC_ID'] = str(procNumber)
+
+    # Expand macros including PYPROC_ID in the command string
+    command = expandMacros( command, procEnv )
+
     devnull = subprocess.DEVNULL
     procName = "pyProc_%d" % procNumber
-    procServExe = '/afs/slac/g/lcls/epics/extensions/R0.4.0/bin/rhel6-x86_64/procServ'
+    procServExe = 'procServ'
     procCmd = [ procServExe, '-f', '--name', procName, str(40000 + procNumber) ]
     cmdArgs = ' '.join(command).split()
     if verbose:
