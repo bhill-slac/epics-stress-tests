@@ -119,7 +119,7 @@ def main(argv=None):
     #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
 
     procNumber = 1
-    for procNumber in list(range(options.count)):
+    for procNumber in range(options.count):
         procNumber = procNumber + 1
         try:
             ( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg, procNumber=procNumber, verbose=options.verbose )
