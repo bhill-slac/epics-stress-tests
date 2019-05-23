@@ -23,9 +23,10 @@ import time
 procList = []
 
 # Pre-compile regular expressions for speed
-macroRefRegExp      = re.compile( r"^(.*)\$([a-zA-Z0-9_]+)(.*)$" )
+macroRefRegExp      = re.compile( r"^([^\$]*)\$([a-zA-Z0-9_]+)(.*)$" )
 
 def expandMacros( strWithMacros, macroDict ):
+    #print( "expandMacros(%s)\n" % strWithMacros )
     global macroRefRegExp
     if type(strWithMacros) is list:
         expandedStrList = []
@@ -42,18 +43,38 @@ def expandMacros( strWithMacros, macroDict ):
         if macroName in macroDict:
             # Expand this macro and continue
             strWithMacros = macroMatch.group(1) + macroDict[macroName] + macroMatch.group(3)
+            #print( "expandMacros: Expanded %s in %s ...\n" % ( macroName, strWithMacros ) )
             continue
         # Check for other macros in the string
         return macroMatch.group(1) + '$' + macroMatch.group(2) + expandMacros( macroMatch.group(3), macroDict )
     return strWithMacros
 
-def launchProcess( command, procNumber=1, procNameBase="pyProc_", basePort=40000, logDir=None, verbose=False ):
+def hasMacros( strWithMacros ):
+    global macroRefRegExp
+    macrosFound = False
+    if type(strWithMacros) is list:
+        for unexpandedStr in strWithMacros:
+            if ( hasMacros( unexpandedStr ) ):
+                macrosFound = True
+        return macrosFound
+
+    if macroRefRegExp.search( strWithMacros ) is not None:
+        macrosFound = True
+    return macrosFound
+
+def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000, logDir=None, verbose=False ):
     # No I/O supported or collected for these processes
     procEnv = os.environ
     procEnv['PYPROC_ID'] = str(procNumber)
 
+    #print( "launchProcess: Unexpanded command:\n\t%s\n" % command )
+
     # Expand macros including PYPROC_ID in the command string
     command = expandMacros( command, procEnv )
+    if hasMacros( command ):
+        print( "launchProcess Error: Command has unexpanded macros!\n\t%s\n" % command )
+        #print( procEnv )
+        return ( None, None )
 
     logFile = None
     devnull = subprocess.DEVNULL
@@ -78,7 +99,8 @@ def launchProcess( command, procNumber=1, procNameBase="pyProc_", basePort=40000
     procCmd += [ '--name', procName ]
     procCmd += [ '--allow' ]
     procCmd += [ '--coresize', '0' ]
-    procCmd += [ '--savelog' ]
+    # Enable --savelog to save timestamped log files
+    #procCmd += [ '--savelog' ]
 
     # Finish w/ procServ connection port and process command
     procCmd.append( str(basePort + procNumber) )
@@ -144,9 +166,7 @@ def main(argv=None):
     #if options.verbose:
     #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
 
-    procNumber = 1
     for procNumber in range(options.count):
-        procNumber = procNumber + 1
         try:
             ( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg,
                                                 procNumber=procNumber,
