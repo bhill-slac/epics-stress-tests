@@ -14,6 +14,8 @@ import io
 import locale
 import os
 import re
+import procServUtils
+import signal
 import subprocess
 import sys
 import tempfile
@@ -77,27 +79,46 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
         return ( None, None )
 
     logFile = None
+    logFileName = None
     devnull = subprocess.DEVNULL
-    procOutput = subprocess.STDOUT
+    #procInput = devnull
+    procInput = None
+    procInput = subprocess.PIPE
+    #procOutput = subprocess.STDOUT
+    procOutput = None
+    procOutput = subprocess.PIPE
     procName = "%s%d" % ( procNameBase, procNumber )
     procServExe = 'procServ'
     # Start w/ procServ executable and procServ parameters
     procCmd = [ procServExe ]
+    # Set signal to SIGINT so child process gets a clean shutdown.
+    #procCmd += [ '--killsig', str(int(signal.SIGINT)) ]
     # Use foreground mode so processes remain child processes and can be cancelled when parent sees Ctrl-C.
-    procCmd += [ '-f' ]
+    useFgMode = True
     if logDir is not None:
         logFileName	= os.path.join( logDir, procName + ".log" )
-        try:
-            logFile = open( logFileName, "w" )
-            # To capture logfile in foreground mode, log to stdout and capture via subprocess
-            procCmd += [ '--logfile', '-' ]
-            procCmd += [ '--logstamp', '--timefmt', '[%c] ' ]
-            procOutput = logFile
-        except IOError:
-            print( "Error: Unable to open %s\n" % logFileName )
-            pass
+    if useFgMode:
+        procCmd += [ '-f' ]
+        if logFileName is not None:
+            try:
+                logFile = open( logFileName, "w" )
+                # To capture logfile in foreground mode, log to stdout and capture via subprocess
+                procCmd += [ '--logfile', '-' ]
+                procInput  = devnull
+                procOutput = logFile
+            except IOError as e:
+                print( "IOError: Unable to open %s\n" % logFileName )
+                pass
+            except OSError as e:
+                print( "OSError: Unable to open %s\n" % logFileName )
+                pass
+    else:
+        if logFileName is not None:
+            procCmd += [ '--logfile', logFileName ]
+    procCmd += [ '--logstamp', '--timefmt', '[%c] ' ]
     procCmd += [ '--name', procName ]
     procCmd += [ '--allow' ]
+    procCmd += [ '--noautorestart' ]
     procCmd += [ '--coresize', '0' ]
     # Enable --savelog to save timestamped log files
     #procCmd += [ '--savelog' ]
@@ -106,10 +127,10 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
     procCmd.append( str(basePort + procNumber) )
     cmdArgs = ' '.join(command).split()
     if verbose:
-        print( "launchProcess: %s\n" % ' '.join(cmdArgs) )
+        print( "launchProcess: %s %s\n" % ( ' '.join(procCmd), ' '.join(cmdArgs) ) )
     proc = None
     try:
-        proc = subprocess.Popen(	procCmd + cmdArgs, stdin=devnull, stdout=procOutput, stderr=subprocess.STDOUT,
+        proc = subprocess.Popen(	procCmd + cmdArgs, stdin=procInput, stdout=procOutput, stderr=subprocess.STDOUT,
                                     env=procEnv, universal_newlines=True )
         if verbose:
             print( "Launched %s with PID %d" % ( procName, proc.pid ) )
@@ -131,10 +152,48 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
         pass
     return ( proc, proc.stdin )
 
-def killProcess( proc, verbose=False ):
+def killProcess( proc, port, verbose=False ):
+    #if verbose:
+    #	print( "killProcess: %d" % proc.pid )
+
+    try:
+        if port is None:
+            proc.kill()
+        else:
+            procServUtils.killProc( 'localhost', port )
+    except:
+        proc.kill()
+
+def terminateProcess( proc, verbose=False ):
     if verbose:
-        print( "killProcess: %d" % proc.pid )
-    proc.kill()
+        print( "terminateProcess: %d" % proc.pid )
+    proc.terminate()
+
+abortAll	= False
+def killProcesses():
+    global abortAll
+    global procList
+    abortAll = True
+    for procTuple in procList:
+        proc      = procTuple[0]
+        procInput = procTuple[1]
+        procPort  = procTuple[2]
+        if proc is not None:
+            killProcess( proc, procPort, verbose=True )
+            procTuple[2] = None
+        if hasattr( procInput, 'close' ):
+            procInput.close()
+
+def pyProc_signal_handler( signum, frame ):
+    print( "\npyProc_signal_handler: Received signal %d" % signum )
+    killProcesses()
+
+# Install signal handler
+signal.signal( signal.SIGINT,  pyProc_signal_handler )
+#signal.signal( signal.SIGTERM, pyProc_signal_handler )
+# Can't catch SIGKILL
+#signal.signal( signal.SIGKILL, pyProc_signal_handler )
+
 
 def process_options(argv):
     if argv is None:
@@ -150,6 +209,7 @@ def process_options(argv):
     parser.add_argument( 'cmd',  help='Command to launch.  Should be an executable file.' )
     parser.add_argument( 'arg', nargs='*', help='Arguments for command line. Enclose options in quotes.' )
     parser.add_argument( '-c', '--count',  action="store", type=int, default=1, help='Number of processes to launch.' )
+    parser.add_argument( '-d', '--delay',  action="store", type=float, default=0.0, help='Delay between process launch.' )
     parser.add_argument( '-v', '--verbose',  action="store_true", help='show more verbose output.' )
     parser.add_argument( '-p', '--port',  action="store", type=int, default=40000, help='Base port number, procServ port is port + str(procNumber)' )
     parser.add_argument( '-n', '--name',  action="store", default="pyProc_", help='process basename, name is basename + str(procNumber)' )
@@ -168,6 +228,8 @@ def main(argv=None):
 
     for procNumber in range(options.count):
         try:
+            if abortAll:
+                break
             ( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg,
                                                 procNumber=procNumber,
                                                 procNameBase=options.name,
@@ -175,14 +237,21 @@ def main(argv=None):
                                                 logDir=options.logDir,
                                                 verbose=options.verbose )
             if proc is not None:
-                procList.append( [ proc, procInput ] )
-        except:
-            pass
+                procList.append( [ proc, procInput, options.port + procNumber ] )
+        except BaseException as e:
+            print( "Error launching proc %d: %s %s" % ( procNumber, options.cmd, args ) )
+            break
+
+        try:
+            if options.delay > 0.0:
+                time.sleep( options.delay )
+        except BaseException as e:
+            raise
 
     time.sleep(1)
     print( "Waiting for %d processes:" % len(procList) )
-    for procPair in procList:
-        procPair[0].wait()
+    for procTuple in procList:
+        procTuple[0].wait()
 
     print( "Done:" )
     return 0
@@ -192,15 +261,11 @@ if __name__ == '__main__':
     try:
         status = main()
     except BaseException as e:
+        print( "Caught exception during main!" )
         print( e )
         pass
 
-    for procPair in procList:
-        proc = procPair[0]
-        procInput = procPair[1]
-        if hasattr( procInput, 'close' ):
-            procInput.close()
-        if proc is not None:
-            killProcess( proc, verbose=True )
+    # Kill any processes still running
+    killProcesses()
 
     sys.exit(status)
