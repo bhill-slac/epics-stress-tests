@@ -94,26 +94,26 @@ def main(argv=None):
         testName = os.path.split( options.top )[1]
         test1 = stressTest( testName, options.top )
         test1.readFiles( options.top )
-        test1.analyze()
         test1.report( level = 2 )
-        test1.viewPlots( level = 2 )
+        viewPlots( test1, level = 2 )
 
     #if options.verbose:
     #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
     #	print( "logDir=%s" % options.logDir )
 
-def readCaptureFile( filePath ):
-    print( "Done:" )
-    return 0
-
 if __name__ == '__main__':
     status = 0
-    status = main()
-    #try:
-    #	status = main()
-    #except BaseException as e:
-    #	print( "Caught exception during main!" )
-    #	print( e )
+    DEV = True
+    if DEV:
+        status = main()
+    else:
+        # Catching the exception is better for users, but
+        # less usefull during development.
+        try:
+            status = main()
+        except BaseException as e:
+            print( "Caught exception during main!" )
+            print( e )
 
     # Pre-exit cleanup
     #killProcesses()

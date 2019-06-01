@@ -150,7 +150,7 @@ class stressTest:
             print( "processPVCaptureFile Error: %s: %s" % ( filePath, e ) )
             pass
 
-    def readFiles( self, dirTop, verbose = True ):
+    def readFiles( self, dirTop, analyze = True, verbose = True ):
         if not os.path.isdir( dirTop ):
             print( "%s is not a directory!" % dirTop )
         for dirPath, dirs, files in os.walk( dirTop, topdown=True ):
@@ -177,60 +177,7 @@ class stressTest:
                     self.processPVCaptureFile( filePath )
                     continue
 
-        analyze = True
         if analyze:
             self.analyze()
         return
-
-    def viewPlots( self, level=2, block=True ):
-        self.plotRates( level=level, block=False )
-        self.plotMissRates( level=level, block=block )
-
-    def plotRates( self, level=2, block=True ):
-        figTitle = 'stressTest %s PV Rates' % self._testName
-        #fig1 = plt.figure( figTitle, figsize=(20,30) )
-        fig1, ax1  = plt.subplots( 1, 1 )
-        ax1.set_title(figTitle)
-
-        numPlots = 0
-        for clientName in self._testClients:
-            client = self._testClients[clientName]
-            testPVs = client.getTestPVs()
-            numPlots = numPlots + len(testPVs.keys())
-            for pvName in testPVs:
-                testPV = testPVs[pvName]
-                tsRates          = testPV.getTsRates()
-                tsMissRates      = testPV.getTsMissRates()
-                times  = np.array( list( tsRates.keys()   ) )
-                values = np.array( list( tsRates.values() ) )
-                plt.plot( times, values, label=pvName )
-
-        if numPlots <= 10:
-            ax1.legend( loc='upper right')
-        plt.draw()
-        plt.show(block=block)
-
-    def plotMissRates( self, level=2, block=True ):
-        figTitle = 'stressTest %s PV Missed Count Rates' % self._testName
-        #fig1 = plt.figure( figTitle, figsize=(20,30) )
-        fig1, ax1  = plt.subplots( 1, 1 )
-        ax1.set_title(figTitle)
-
-        numPlots = 0
-        for clientName in self._testClients:
-            client = self._testClients[clientName]
-            testPVs = client.getTestPVs()
-            numPlots = numPlots + len(testPVs.keys())
-            for pvName in testPVs:
-                testPV = testPVs[pvName]
-                #tsRates          = testPV.getTsRates()
-                tsMissRates      = testPV.getTsMissRates()
-                times  = np.array( list( tsMissRates.keys()   ) )
-                values = np.array( list( tsMissRates.values() ) )
-                plt.plot( times, values, label=pvName )
-
-        if numPlots <= 10:
-            ax1.legend( loc='upper right')
-        plt.draw()
-        plt.show(block=block)
 
