@@ -67,7 +67,8 @@ def hasMacros( strWithMacros ):
 def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000, logDir=None, verbose=False ):
     # No I/O supported or collected for these processes
     procEnv = os.environ
-    procEnv['PYPROC_ID'] = str(procNumber)
+    procEnv['PYPROC_ID'] = "%02u" % procNumber
+    procName = "%s%02u" % ( procNameBase, procNumber )
 
     #if verbose:
     #	print( "launchProcess: Unexpanded command:\n\t%s\n" % command )
@@ -88,7 +89,6 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
     #procOutput = subprocess.STDOUT
     procOutput = None
     procOutput = subprocess.PIPE
-    procName = "%s%d" % ( procNameBase, procNumber )
     procServExe = 'procServ'
     # Start w/ procServ executable and procServ parameters
     procCmd = [ procServExe ]
