@@ -69,7 +69,8 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
     procEnv = os.environ
     procEnv['PYPROC_ID'] = str(procNumber)
 
-    #print( "launchProcess: Unexpanded command:\n\t%s\n" % command )
+    #if verbose:
+    #	print( "launchProcess: Unexpanded command:\n\t%s\n" % command )
 
     # Expand macros including PYPROC_ID in the command string
     command = expandMacros( command, procEnv )
@@ -96,7 +97,14 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
     # Use foreground mode so processes remain child processes and can be cancelled when parent sees Ctrl-C.
     useFgMode = True
     if logDir is not None:
+        logDir	= os.path.join( logDir, procName )
+        try:
+            os.makedirs( logDir, mode=0o775, exist_ok=True )
+        except BaseException as e:
+            print( "Error in os.makedirs( %s, mode=0o%o )" % ( logDir, 0o775 ) )
         logFileName	= os.path.join( logDir, procName + ".log" )
+        if verbose:
+            print( "logDir=%s, logFileName=%s\n" % ( logDir, logFileName ) )
     if useFgMode:
         procCmd += [ '-f' ]
         if logFileName is not None:
@@ -225,7 +233,7 @@ def main(argv=None):
     args = ' '.join( options.arg )
     #if options.verbose:
     #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
-
+    #	print( "logDir=%s\n" % options.logDir )
     for procNumber in range(options.count):
         try:
             if abortAll:
