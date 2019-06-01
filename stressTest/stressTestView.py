@@ -6,12 +6,15 @@ import sys
 import json
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.style
+matplotlib.style.use( 'seaborn-whitegrid' )
 
+#from matplotlib.font_manager import FontProperties
 from stressTest import *
 
 def viewPlots( sTest, level=2, block=True ):
-    sTest.plotRates( level=level, block=False )
-    sTest.plotMissRates( level=level, block=block )
+    plotRates( sTest, level=level, block=False )
+    plotMissRates( sTest, level=level, block=block )
 
 def plotRates( sTest, level=2, block=True ):
     figTitle = 'stressTest %s PV Rates' % sTest._testName
@@ -19,8 +22,11 @@ def plotRates( sTest, level=2, block=True ):
     fig1, ax1  = plt.subplots( 1, 1 )
     ax1.set_title(figTitle)
 
+    startTime = sTest.getStartTime()
     numPlots = 0
-    for clientName in sTest._testClients:
+    sortedClientNames = list(sTest._testClients.keys())
+    sortedClientNames.sort()
+    for clientName in sortedClientNames:
         client = sTest._testClients[clientName]
         testPVs = client.getTestPVs()
         numPlots = numPlots + len(testPVs.keys())
@@ -30,10 +36,13 @@ def plotRates( sTest, level=2, block=True ):
             tsMissRates      = testPV.getTsMissRates()
             times  = np.array( list( tsRates.keys()   ) )
             values = np.array( list( tsRates.values() ) )
+            if startTime:
+                times  -= int(startTime)
             plt.plot( times, values, label=pvName )
 
     if numPlots <= 10:
-        ax1.legend( loc='upper right')
+        #ax1.legend( loc='upper right')
+        ax1.legend( loc='best', fontsize='small' )
     plt.draw()
     plt.show(block=block)
 
@@ -43,8 +52,11 @@ def plotMissRates( sTest, level=2, block=True ):
     fig1, ax1  = plt.subplots( 1, 1 )
     ax1.set_title(figTitle)
 
+    startTime = sTest.getStartTime()
     numPlots = 0
-    for clientName in sTest._testClients:
+    sortedClientNames = list(sTest._testClients.keys())
+    sortedClientNames.sort()
+    for clientName in sortedClientNames:
         client = sTest._testClients[clientName]
         testPVs = client.getTestPVs()
         numPlots = numPlots + len(testPVs.keys())
@@ -54,10 +66,15 @@ def plotMissRates( sTest, level=2, block=True ):
             tsMissRates      = testPV.getTsMissRates()
             times  = np.array( list( tsMissRates.keys()   ) )
             values = np.array( list( tsMissRates.values() ) )
+            if startTime:
+                times  -= int(startTime)
             plt.plot( times, values, label=pvName )
 
     if numPlots <= 10:
-        ax1.legend( loc='upper right')
+        #legendFontProp = FontProperties()
+        #legendFontProp.set_size('small')
+        #ax1.legend( loc='best', prop=legendFontProp )
+        ax1.legend( loc='best', fontsize='small' )
     plt.draw()
     plt.show(block=block)
 
