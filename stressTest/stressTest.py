@@ -50,10 +50,17 @@ class stressTest:
         for clientName in self._testClients:
             client = self._testClients[clientName]
             client.analyze()
+
             # Update totals
             self._totalNumPVs      += client.getNumPVs()
             self._totalNumTsValues += client.getNumTsValues()
             self._totalNumMissed   += client.getNumMissed()
+
+            # Update start and end times
+            if  self._startTime is None or self._startTime > client.getStartTime():
+                self._startTime =  client.getStartTime()
+            if  self._endTime   is None or self._endTime < client.getEndTime():
+                self._endTime   =  client.getEndTime()
 
     def report( self, level=2 ):
         print( "\nStressTest Report:" )
