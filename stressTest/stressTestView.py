@@ -33,12 +33,15 @@ def plotRates( sTest, level=2, block=True ):
         for pvName in testPVs:
             testPV = testPVs[pvName]
             tsRates          = testPV.getTsRates()
-            tsMissRates      = testPV.getTsMissRates()
             times  = np.array( list( tsRates.keys()   ) )
             values = np.array( list( tsRates.values() ) )
             if startTime:
                 times  -= int(startTime)
             plt.plot( times, values, label=pvName )
+
+    if numPlots == 0:
+        print( "No PV rate data to plot." )
+        return
 
     if numPlots <= 10:
         #ax1.legend( loc='upper right')
@@ -62,13 +65,16 @@ def plotMissRates( sTest, level=2, block=True ):
         numPlots = numPlots + len(testPVs.keys())
         for pvName in testPVs:
             testPV = testPVs[pvName]
-            #tsRates          = testPV.getTsRates()
             tsMissRates      = testPV.getTsMissRates()
             times  = np.array( list( tsMissRates.keys()   ) )
             values = np.array( list( tsMissRates.values() ) )
             if startTime:
                 times  -= int(startTime)
             plt.plot( times, values, label=pvName )
+
+    if numPlots == 0:
+        print( "No counter miss rate data to plot." )
+        return
 
     if numPlots <= 10:
         #legendFontProp = FontProperties()
@@ -81,8 +87,8 @@ def plotMissRates( sTest, level=2, block=True ):
 def process_options(argv):
     if argv is None:
         argv = sys.argv[1:]
-    description =	'stressTestView supports viewing results from CA or PVA network stress tests.\n'
-    epilog_fmt  =	'\nExamples:\n' \
+    description =   'stressTestView supports viewing results from CA or PVA network stress tests.\n'
+    epilog_fmt  =   '\nExamples:\n' \
                     'stressTestView PATH/TO/TEST/TOP"\n'
     epilog = textwrap.dedent( epilog_fmt )
     parser = argparse.ArgumentParser( description=description, formatter_class=argparse.RawDescriptionHelpFormatter, epilog=epilog )
@@ -115,8 +121,8 @@ def main(argv=None):
         viewPlots( test1, level = 2 )
 
     #if options.verbose:
-    #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
-    #	print( "logDir=%s" % options.logDir )
+    #   print( "Full Cmd: %s %s" % ( options.cmd, args ) )
+    #   print( "logDir=%s" % options.logDir )
 
 if __name__ == '__main__':
     status = 0

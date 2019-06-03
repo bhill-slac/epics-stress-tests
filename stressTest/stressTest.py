@@ -8,20 +8,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from stressTestClient import *
+from stressTestFile import *
 
 class stressTest:
     def __init__( self, testName, testPathTop ):
-        self._testName = testName
-        self._testPath = testPathTop
-        self._testClients = {}
-        self._testServers = {}
-        self._testPVs = {}
-        self._gwStats = {}
-        self._totalNumPVs      = 0		# Total number of testPVs for all clients
-        self._totalNumMissed   = 0		# Total number of cumulative missed counts for all clients and testPVs
-        self._totalNumTsValues = 0		# Total number of timestamped values collected for all clients and testPVs
-        self._startTime        = None	# Earliest timestamp for test
-        self._endTime          = None	# Latest   timestamp for test
+        self._testName          = testName
+        self._testPath          = testPathTop
+        self._testClients       = {}    # map of test clients, key is clientName
+        self._testFiles         = {}    # map of test files, key is pathTopToFile
+        self._testServers       = {}    # map of test servers, key is serverName
+        #self._gwStats          = {}
+        self._totalNumPVs       = 0     # Total number of testPVs for all clients
+        self._totalNumMissed    = 0     # Total number of cumulative missed counts for all clients and testPVs
+        self._totalNumTsValues  = 0     # Total number of timestamped values collected for all clients and testPVs
+        self._startTime        = None   # Earliest timestamp for test
+        self._endTime          = None   # Latest   timestamp for test
 
     def getEndTime( self ):
         return self._endTime
@@ -65,9 +66,24 @@ class stressTest:
     def report( self, level=2 ):
         print( "\nStressTest Report:" )
         print( "TestName: %s" % self._testName )
-        #totalNumPVs = 0
-        #totalNumTsValues = 0
-        #totalNumMissed   = 0
+
+        # Show files
+        if len(self._testFiles):
+            typeInfo = {}   # map of fileType to ( numLines, numTsValues )
+            for testFile in self._testFiles:
+                fileInfo = ( testFile.getNumLines(), testFile.getNumTsValues() )
+                fileType = testFile.getFileType()
+                if fileType in typeInfo:
+                    typeInfo[fileType] += fileInfo
+                else:
+                    typeInfo[fileType] = fileInfo
+            print( "    FileTypes  NumPVs NumTsValues" )
+            #      "    TTTTTTTTTT NNNNNN TTTTTTTTTTT" )
+            for fileType in typeInfo:
+                print(  "    %-10s %6u %11u" % ( fileType,
+                        typeInfo[fileType][0], typeInfo[fileType][1] ) ) 
+
+        # Show clients
         if len(self._testClients):
             print( "Clients                            NumPVs NumTsValues NumMissed" )
             #      "    CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC NNNNNN TTTTTTTTTTT MMMMMMMMM" )
@@ -114,11 +130,11 @@ class stressTest:
                         print( "%4u" % tsMissRates[t] )
 
         #if level >= 2:
-        #	print( "    %-30s %6u %11u %9u" % ( "Total",
-        #				self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
+        #   print( "    %-30s %6u %11u %9u" % ( "Total",
+        #               self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
         #else:
-        #	print( "    %-30s %6u %11u %9u" % ( str(len(self._testClients)),
-        #				self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
+        #   print( "    %-30s %6u %11u %9u" % ( str(len(self._testClients)),
+        #               self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
         print( "    %-30s %6u %11u %9u" % ( "Total" if level >= 2 else str(len(self._testClients)),
                     self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
 
@@ -143,7 +159,7 @@ class stressTest:
             tsValueList = readPVCaptureFile( filePath )
             tsValues = {}
             for tsValue in tsValueList:
-                timeStamp = tsValue[0]	# timeStamp should be [ secPastEpoch, nsec ]
+                timeStamp = tsValue[0]  # timeStamp should be [ secPastEpoch, nsec ]
                 value = tsValue[1]
                 tsValues[ timeStamp[0] + timeStamp[1]*1e-9 ] = value
             if appType == "client":
