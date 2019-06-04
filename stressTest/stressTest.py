@@ -96,9 +96,6 @@ class stressTest:
             numMissed        = client.getNumMissed()
             #tsRates          = client.getTsRates()
             #tsMissRates      = client.getTsMissRates()
-            #totalNumPVs      = totalNumPVs + numPVs
-            #totalNumTsValues = totalNumTsValues + numTsValues
-            #totalNumMissed   = totalNumMissed + numMissed
             if level >= 2:
                 print( "    %-30s %6u %11u %9u" % ( clientName, numPVs, numTsValues, numMissed ) )
             if level >= 3:
@@ -129,12 +126,6 @@ class stressTest:
                         t = list( tsMissRates.keys() )[numShow-1]
                         print( "%4u" % tsMissRates[t] )
 
-        #if level >= 2:
-        #   print( "    %-30s %6u %11u %9u" % ( "Total",
-        #               self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
-        #else:
-        #   print( "    %-30s %6u %11u %9u" % ( str(len(self._testClients)),
-        #               self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
         print( "    %-30s %6u %11u %9u" % ( "Total" if level >= 2 else str(len(self._testClients)),
                     self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
 
