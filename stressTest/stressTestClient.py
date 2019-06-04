@@ -44,36 +44,18 @@ def pathToTestAttr( filePath ):
     except BaseException as e:
         raise InvalidStressTestPathError( str(e) )
 
-def readPVCaptureFile( filePath ):
-    '''Capture files should follow json syntax and contain
-    a list of tsPV values.
-    Each tsPV is a list of timestamp, value.
-    Each timestamp is a list of EPICS secPastEpoch, nsec.
-    Ex.
-    [
-        [ [ 1559217327, 738206558], 8349 ],
-        [ [ 1559217327, 744054279], 8350 ]
-    ]
-    '''
-    try:
-        f = open( filePath )
-        contents = json.load( f )
-        return contents
-    except BaseException as e:
-        raise InvalidStressTestCaptureFile( "readPVCaptureFile Error: %s: %s" % ( filePath, e ) )
-
 class stressTestClient:
     def __init__( self, clientName, hostName ):
         self._clientName  = clientName
         self._hostName    = hostName
-        self._testPVs     = {}		# Dict of stressTestPV instances, keys are pvName strings
-        self._tsNumPVs    = {}		# Dict of active PV counts, keys are int secPastEpoch values
-        self._tsRates     = {}		# Dict of cumulative PV collection rate for all client testPVs
-        self._tsMissRates = {}		# Dict of cumulative miss rate for all client testPVs
-        self._numMissed   = 0		# Number of cumulative missed counts for all client testPVs
-        self._numTsValues = 0		# Number of timestamped values collected for all client testPVs
-        self._startTime   = None	# Earliest timestamp of all client testPVs
-        self._endTime     = None	# Latest timestamp of all client testPVs
+        self._testPVs     = {}      # Dict of stressTestPV instances, keys are pvName strings
+        self._tsNumPVs    = {}      # Dict of active PV counts, keys are int secPastEpoch values
+        self._tsRates     = {}      # Dict of cumulative PV collection rate for all client testPVs
+        self._tsMissRates = {}      # Dict of cumulative miss rate for all client testPVs
+        self._numMissed   = 0       # Number of cumulative missed counts for all client testPVs
+        self._numTsValues = 0       # Number of timestamped values collected for all client testPVs
+        self._startTime   = None    # Earliest timestamp of all client testPVs
+        self._endTime     = None    # Latest timestamp of all client testPVs
 
     # Accessors
     def getHostName( self ):
@@ -112,6 +94,9 @@ class stressTestClient:
             print( "getTestPV: Created new testPV %s" % testPV.getName() )
             self._testPVs[pvName] = testPV
         return testPV
+
+    def addTestFile( self, pvName, stressTestFile ):
+        self.addTsValues( pvName, stressTestFile.getTsValues() )
 
     # stressTestClient.addTsValues
     def addTsValues( self, pvName, tsValues ):

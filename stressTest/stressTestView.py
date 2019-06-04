@@ -29,15 +29,17 @@ def plotRates( sTest, level=2, block=True ):
     for clientName in sortedClientNames:
         client = sTest._testClients[clientName]
         testPVs = client.getTestPVs()
-        numPlots = numPlots + len(testPVs.keys())
         for pvName in testPVs:
             testPV = testPVs[pvName]
             tsRates          = testPV.getTsRates()
+            if len(tsRates) == 0:
+                continue
             times  = np.array( list( tsRates.keys()   ) )
             values = np.array( list( tsRates.values() ) )
             if startTime:
                 times  -= int(startTime)
             plt.plot( times, values, label=pvName )
+            numPlots = numPlots + 1
 
     if numPlots == 0:
         print( "No PV rate data to plot." )
@@ -62,15 +64,17 @@ def plotMissRates( sTest, level=2, block=True ):
     for clientName in sortedClientNames:
         client = sTest._testClients[clientName]
         testPVs = client.getTestPVs()
-        numPlots = numPlots + len(testPVs.keys())
         for pvName in testPVs:
             testPV = testPVs[pvName]
             tsMissRates      = testPV.getTsMissRates()
+            if len(tsMissRates) == 0:
+                continue
             times  = np.array( list( tsMissRates.keys()   ) )
             values = np.array( list( tsMissRates.values() ) )
             if startTime:
                 times  -= int(startTime)
             plt.plot( times, values, label=pvName )
+            numPlots = numPlots + 1
 
     if numPlots == 0:
         print( "No counter miss rate data to plot." )

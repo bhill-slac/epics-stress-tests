@@ -3,12 +3,12 @@
 class stressTestPV:
     def __init__( self, pvName ):
         self._pvName = pvName
-        self._tsValues    = {}		# Dict of collected values,   keys are float timestamps
-        self._tsRates     = {}		# Dict of collection rates,   keys are int secPastEpoch values
-        self._tsMissRates = {}		# Dict of missed count rates, keys are int secPastEpoch values
-        self._numMissed   = 0		# Cumulative number of missed counts
-        self._startTime   = None	# Earliest timestamp of all collected values
-        self._endTime     = None	# Latest   timestamp of all collected values
+        self._tsValues    = {}      # Dict of collected values,   keys are float timestamps
+        self._tsRates     = {}      # Dict of collection rates,   keys are int secPastEpoch values
+        self._tsMissRates = {}      # Dict of missed count rates, keys are int secPastEpoch values
+        self._numMissed   = 0       # Cumulative number of missed counts
+        self._startTime   = None    # Earliest timestamp of all collected values
+        self._endTime     = None    # Latest   timestamp of all collected values
 
     # Accessors
     def getName( self ):
@@ -37,6 +37,7 @@ class stressTestPV:
     def analyze( self ):
         ( priorSec, priorValue ) = ( None, None )
         ( missed, count ) = ( 0, 0 )
+        sec = None
         for timestamp in self._tsValues:
             sec = int(timestamp)
             if priorSec is None:
@@ -69,7 +70,8 @@ class stressTestPV:
                     missed += ( value - priorValue + 1 )
             priorValue = value
 
-        self._tsRates[sec] = count
-        self._tsMissRates[sec] = missed
-        self._numMissed += missed
+        if sec:
+            self._tsRates[sec] = count
+            self._tsMissRates[sec] = missed
+            self._numMissed += missed
 

@@ -58,10 +58,12 @@ class stressTest:
             self._totalNumMissed   += client.getNumMissed()
 
             # Update start and end times
-            if  self._startTime is None or self._startTime > client.getStartTime():
-                self._startTime =  client.getStartTime()
-            if  self._endTime   is None or self._endTime < client.getEndTime():
-                self._endTime   =  client.getEndTime()
+            if client.getStartTime():
+                if  self._startTime is None or self._startTime > client.getStartTime():
+                    self._startTime =  client.getStartTime()
+            if client.getEndTime():
+                if  self._endTime   is None or self._endTime < client.getEndTime():
+                    self._endTime   =  client.getEndTime()
 
     def report( self, level=2 ):
         print( "\nStressTest Report:" )
@@ -70,18 +72,22 @@ class stressTest:
         # Show files
         if len(self._testFiles):
             typeInfo = {}   # map of fileType to ( numLines, numTsValues )
-            for testFile in self._testFiles:
+            sortedFileNames = list(self._testFiles)
+            sortedFileNames.sort()
+            for fileName in sortedFileNames:
+                testFile = self._testFiles[fileName]
                 fileInfo = ( testFile.getNumLines(), testFile.getNumTsValues() )
                 fileType = testFile.getFileType()
                 if fileType in typeInfo:
-                    typeInfo[fileType] += fileInfo
+                    ( numPVs, numTsValues ) = typeInfo[fileType]
+                    typeInfo[fileType] = (fileInfo[0] + numPVs, fileInfo[1] + numTsValues)
                 else:
                     typeInfo[fileType] = fileInfo
-            print( "    FileTypes  NumPVs NumTsValues" )
-            #      "    TTTTTTTTTT NNNNNN TTTTTTTTTTT" )
+            print( "    FileTypes  NumLines NumTsValues" )
+            #      "    TTTTTTTTTT NNNNNNNN TTTTTTTTTTT" )
             for fileType in typeInfo:
-                print(  "    %-10s %6u %11u" % ( fileType,
-                        typeInfo[fileType][0], typeInfo[fileType][1] ) ) 
+                ( numPVs, numTsValues ) = typeInfo[fileType]
+                print(  "    %-10s %8u %11u" % (fileType, numPVs, numTsValues) )
 
         # Show clients
         if len(self._testClients):
@@ -144,26 +150,6 @@ class stressTest:
             self._testClients[clientName] = client
         return client
 
-    def processPVCaptureFile( self, filePath ):
-        try:
-            ( testName, hostName, appType, appName, pvName ) =  pathToTestAttr( filePath )
-            tsValueList = readPVCaptureFile( filePath )
-            tsValues = {}
-            for tsValue in tsValueList:
-                timeStamp = tsValue[0]  # timeStamp should be [ secPastEpoch, nsec ]
-                value = tsValue[1]
-                tsValues[ timeStamp[0] + timeStamp[1]*1e-9 ] = value
-            if appType == "client":
-                client = self.getClient( appName, hostName )
-                client.addTsValues( pvName, tsValues )
-
-        except InvalidStressTestCaptureFile as e:
-            print( e )
-            pass
-        except BaseException as e:
-            print( "processPVCaptureFile Error: %s: %s" % ( filePath, e ) )
-            pass
-
     def readFiles( self, dirTop, analyze = True, verbose = True ):
         if not os.path.isdir( dirTop ):
             print( "%s is not a directory!" % dirTop )
@@ -174,22 +160,29 @@ class stressTest:
                     print( "Processing client %s ..." % appName )
             for fileName in files:
                 filePath = os.path.join( dirPath, fileName )
+                stressTestFile = None
                 if fileName.endswith( '.pvget' ):
+                    stressTestFile = stressTestFilePVGet( filePath )
                     # readPVGetClientFile( fileName )
-                    continue
-                if fileName.endswith( '.log' ):
+                elif fileName.endswith( 'pvCapture' ):
+                    stressTestFile = stressTestFilePVCapture( filePath )
+                    #self.processPVCaptureFile( filePath )
+                #elif fileName.endswith( '.log' ):
                     # readLogFile( fileName )
-                    continue
-                if fileName.endswith( '.list' ):
-                    continue
-                if fileName.endswith( '.cfg' ):
-                    continue
-                if fileName.endswith( '.info' ):
+                #elif fileName.endswith( '.list' ):
+                #   continue
+                #elif fileName.endswith( '.cfg' ):
+                #   continue
+                #elif fileName.endswith( '.info' ):
                     # readInfoFile( fileName )
+
+                if not stressTestFile:
                     continue
-                if fileName.endswith( 'pvCapture' ):
-                    self.processPVCaptureFile( filePath )
-                    continue
+                self._testFiles[filePath] = stressTestFile
+                ( testName, hostName, appType, appName, pvName ) =  pathToTestAttr( filePath )
+                if appType == "client":
+                    client = self.getClient( appName, hostName )
+                    client.addTestFile( pvName, stressTestFile )
 
         if analyze:
             self.analyze()
