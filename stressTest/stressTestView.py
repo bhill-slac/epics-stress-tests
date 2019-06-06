@@ -13,10 +13,10 @@ matplotlib.style.use( 'seaborn-whitegrid' )
 from stressTest import *
 
 def viewPlots( sTest, level=2, block=True ):
-    plotRates( sTest, level=level, block=False )
-    plotMissRates( sTest, level=level, block=block )
+    plotMissRates( sTest, level=level, block=False )
+    plotCaptureRates( sTest, level=level, block=block )
 
-def plotRates( sTest, level=2, block=True ):
+def plotCaptureRates( sTest, level=2, block=True ):
     figTitle = 'stressTest %s PV Rates' % sTest._testName
     #fig1 = plt.figure( figTitle, figsize=(20,30) )
     fig1, ax1  = plt.subplots( 1, 1 )
@@ -28,6 +28,8 @@ def plotRates( sTest, level=2, block=True ):
     sortedClientNames.sort()
     for clientName in sortedClientNames:
         client = sTest._testClients[clientName]
+        if client.getClientType() != 'pvCapture':
+            continue
         testPVs = client.getTestPVs()
         for pvName in testPVs:
             testPV = testPVs[pvName]

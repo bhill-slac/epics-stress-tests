@@ -91,8 +91,8 @@ class stressTest:
 
         # Show clients
         if len(self._testClients):
-            print( "Clients                            NumPVs NumTsValues NumMissed" )
-            #      "    CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC NNNNNN TTTTTTTTTTT MMMMMMMMM" )
+            print( "Clients                            NumPVs NumTsValues NumMissed Timeouts" )
+            #      "    CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC NNNNNN TTTTTTTTTTT MMMMMMMMM TTTTTTTT" )
         sortedClientNames = list(self._testClients.keys())
         sortedClientNames.sort()
         for clientName in sortedClientNames:
@@ -100,17 +100,18 @@ class stressTest:
             numPVs           = client.getNumPVs()
             numTsValues      = client.getNumTsValues()
             numMissed        = client.getNumMissed()
+            numTimeouts      = client.getNumMissed()
             #tsRates          = client.getTsRates()
             #tsMissRates      = client.getTsMissRates()
             if level >= 2:
-                print( "    %-30s %6u %11u %9u" % ( clientName, numPVs, numTsValues, numMissed ) )
+                print( "    %-30s %6u %11u %9u %8u" % ( clientName, numPVs, numTsValues, numMissed, numTimeouts ) )
             if level >= 3:
                 testPVs = client.getTestPVs()
                 sortedPVNames = list(testPVs.keys())
                 sortedPVNames.sort()
                 for pvName in sortedPVNames:
                     testPV = testPVs[pvName]
-                    print( "        %-26s %6u %11u %9u" % ( pvName, 1, testPV.getNumTsValues(), testPV.getNumMissed() ) )
+                    print( "        %-26s %6u %11u %9u %8u" % ( pvName, 1, testPV.getNumTsValues(), testPV.getNumMissed(), testPV.getNumTimeouts() ) )
                     if level >= 4:
                         tsRates          = testPV.getTsRates()
                         sortedKeys = list(tsRates.keys())
@@ -150,7 +151,7 @@ class stressTest:
             self._testClients[clientName] = client
         return client
 
-    def readFiles( self, dirTop, analyze = True, verbose = True ):
+    def readFiles( self, dirTop, analyze = True, verbose = False ):
         if not os.path.isdir( dirTop ):
             print( "%s is not a directory!" % dirTop )
         for dirPath, dirs, files in os.walk( dirTop, topdown=True ):

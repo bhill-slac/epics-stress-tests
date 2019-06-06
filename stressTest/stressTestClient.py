@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 import os
 import json
+from stressTestFile import *
 from stressTestPV import *
-
-class InvalidStressTestCaptureFile( Exception ):
-    pass
 
 class InvalidStressTestPathError( Exception ):
     pass
@@ -56,6 +54,7 @@ class stressTestClient:
         self._numTsValues = 0       # Number of timestamped values collected for all client testPVs
         self._startTime   = None    # Earliest timestamp of all client testPVs
         self._endTime     = None    # Latest timestamp of all client testPVs
+        self._clientType  = None
 
     # Accessors
     def getHostName( self ):
@@ -84,18 +83,26 @@ class stressTestClient:
         return self._tsMissRates
     def getTestPVs( self ):
         return self._testPVs
+    def getClientType( self ):
+        return self._clientType
 
-    def getTestPV( self, pvName ):
+    def getTestPV( self, pvName, verbose=False ):
         testPV = None
         if pvName in self._testPVs:
             testPV = self._testPVs[pvName]
         if testPV is None:
             testPV = stressTestPV( pvName )
-            print( "getTestPV: Created new testPV %s" % testPV.getName() )
+            if verbose:
+                print( "getTestPV: Created new testPV %s" % testPV.getName() )
             self._testPVs[pvName] = testPV
         return testPV
 
     def addTestFile( self, pvName, stressTestFile ):
+        if  self._clientType is None:
+            self._clientType = stressTestFile.getFileType()
+        if  self._clientType != stressTestFile.getFileType():
+            print(  "addTestFile Client %s, type %s Warning: Adding type %s" %
+                    ( self._clientName, self._clientType, stressTestFile.getFileType() ) )
         self.addTsValues( pvName, stressTestFile.getTsValues() )
 
     # stressTestClient.addTsValues
@@ -115,10 +122,12 @@ class stressTestClient:
             testPV = self._testPVs[pvName]
             testPV.analyze()
             self._numMissed += testPV.getNumMissed()
-            if  self._startTime is None or self._startTime > testPV.getStartTime():
-                self._startTime = testPV.getStartTime()
-            if  self._endTime is None or self._endTime < testPV.getEndTime():
-                self._endTime = testPV.getEndTime()
+            if testPV.getStartTime() is not None:
+                if  self._startTime is None or self._startTime > testPV.getStartTime():
+                    self._startTime = testPV.getStartTime()
+            if testPV.getEndTime() is not None:
+                if  self._endTime is None or self._endTime < testPV.getEndTime():
+                    self._endTime = testPV.getEndTime()
 
             # Compute client count rates
             pvTsRates = testPV.getTsRates()

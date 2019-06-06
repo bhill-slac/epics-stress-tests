@@ -6,7 +6,9 @@ class stressTestPV:
         self._tsValues    = {}      # Dict of collected values,   keys are float timestamps
         self._tsRates     = {}      # Dict of collection rates,   keys are int secPastEpoch values
         self._tsMissRates = {}      # Dict of missed count rates, keys are int secPastEpoch values
+        self._timeoutRates= {}      # Dict of timeout rates, keys are int secPastEpoch values
         self._numMissed   = 0       # Cumulative number of missed counts
+        self._numTimeouts = 0       # Cumulative number of timeouts
         self._startTime   = None    # Earliest timestamp of all collected values
         self._endTime     = None    # Latest   timestamp of all collected values
 
@@ -17,6 +19,8 @@ class stressTestPV:
         return len(self._tsValues)
     def getNumMissed( self ):
         return self._numMissed
+    def getNumTimeouts( self ):
+        return self._numTimeouts
     def getEndTime( self ):
         return self._endTime;
     def getStartTime( self ):
@@ -27,16 +31,20 @@ class stressTestPV:
         return self._tsRates
     def getTsMissRates( self ):
         return self._tsMissRates
+    def getTimeoutRates( self ):
+        return self._timeoutRates
 
     def addTsValues( self, tsValues ):
         # TODO: check for more than one value for the same timestamp
-        # TODO: check for out of order timestamps
         self._tsValues.update( tsValues )
+
+    def addTsTimeouts( self, tsTimeouts ):
+        self._tsTimeouts.update( tsTimeouts )
 
     # stressTestPV.analyze
     def analyze( self ):
         ( priorSec, priorValue ) = ( None, None )
-        ( missed, count ) = ( 0, 0 )
+        ( count, missed, timeouts ) = ( 0, 0, 0 )
         sec = None
         for timestamp in self._tsValues:
             sec = int(timestamp)
@@ -49,8 +57,10 @@ class stressTestPV:
                     self._endTime = sec
                 self._tsRates[priorSec] = count
                 self._tsMissRates[priorSec] = missed
+                self._timeoutRates[priorSec] = timeouts
                 self._numMissed += missed
-                ( missed, count ) = ( 0, 0 )
+                self._numTimeouts += timeouts
+                ( count, missed, timeouts ) = ( 0, 0, 0 )
                 # Advance priorSec, filling gaps w/ zeroes
                 while True:
                     priorSec += 1
@@ -58,9 +68,13 @@ class stressTestPV:
                         break
                     self._tsRates[priorSec] = 0
                     self._tsMissRates[priorSec] = 0
+                    self._timeoutRates[priorSec] = 0
                 priorSec = sec
             count += 1
             value = self._tsValues[timestamp]
+            if value is None:
+                timeouts += 1
+                continue
             if priorValue is not None:
                 if priorValue + 1 != value:
                     # Keep track of miss incidents
@@ -73,5 +87,5 @@ class stressTestPV:
         if sec:
             self._tsRates[sec] = count
             self._tsMissRates[sec] = missed
-            self._numMissed += missed
+            self._timeoutRates[sec] = timeouts
 
