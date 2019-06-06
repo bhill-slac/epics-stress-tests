@@ -100,7 +100,9 @@ def process_options(argv):
     #parser.add_argument( 'arg', nargs='*', help='Arguments for command line. Enclose options in quotes.' )
     #parser.add_argument( '-c', '--count',  action="store", type=int, default=1, help='Number of processes to launch.' )
     #parser.add_argument( '-d', '--delay',  action="store", type=float, default=0.0, help='Delay between process launch.' )
+    parser.add_argument( '--noPlot',    action="store_true", help='Suppress plot popups.' )
     parser.add_argument( '-t', '--top',  action="store", help='Top directory of test results.' )
+    parser.add_argument( '-r', '--report',   action="store", type=int, default=2, help='Set report level.    Higher numbers show more detail.' )
     parser.add_argument( '-v', '--verbose',  action="store_true", help='show more verbose output.' )
     #parser.add_argument( '-p', '--port',  action="store", type=int, default=40000, help='Base port number, procServ port is port + str(procNumber)' )
     #parser.add_argument( '-n', '--name',  action="store", default="pyProc_", help='process basename, name is basename + str(procNumber)' )
@@ -121,8 +123,9 @@ def main(argv=None):
         testName = os.path.split( options.top )[1]
         test1 = stressTest( testName, options.top )
         test1.readFiles( options.top )
-        test1.report( level = 2 )
-        viewPlots( test1, level = 2 )
+        test1.report( options.report )
+        if not options.noPlot:
+            viewPlots( test1, options.report )
 
     #if options.verbose:
     #   print( "Full Cmd: %s %s" % ( options.cmd, args ) )
