@@ -21,6 +21,7 @@ class stressTest:
         self._totalNumPVs       = 0     # Total number of testPVs for all clients
         self._totalNumMissed    = 0     # Total number of cumulative missed counts for all clients and testPVs
         self._totalNumTsValues  = 0     # Total number of timestamped values collected for all clients and testPVs
+        self._totalNumTimeouts  = 0     # Total number of timeouts collected for all clients and testPVs
         self._startTime        = None   # Earliest timestamp for test
         self._endTime          = None   # Latest   timestamp for test
 
@@ -41,6 +42,9 @@ class stressTest:
     def getTotalNumTsValues( self ):
         '''Total number of timestamped values collected for all clients and testPVs.'''
         return self._totalNumTsValues
+    def getTotalNumTimeouts( self ):
+        '''Total number of timeouts collected for all clients and testPVs.'''
+        return self._totalNumTimeouts
 
     def analyze( self ):
         print( "stressTestView.analyze: %s ..." % self._testName )
@@ -56,6 +60,7 @@ class stressTest:
             self._totalNumPVs      += client.getNumPVs()
             self._totalNumTsValues += client.getNumTsValues()
             self._totalNumMissed   += client.getNumMissed()
+            self._totalNumTimeouts += client.getNumTimeouts()
 
             # Update start and end times
             if client.getStartTime():
@@ -76,18 +81,20 @@ class stressTest:
             sortedFileNames.sort()
             for fileName in sortedFileNames:
                 testFile = self._testFiles[fileName]
-                fileInfo = ( testFile.getNumLines(), testFile.getNumTsValues() )
+                fileInfo = ( testFile.getNumLines(), testFile.getNumTsValues(), testFile.getNumTimeouts() )
                 fileType = testFile.getFileType()
                 if fileType in typeInfo:
-                    ( numPVs, numTsValues ) = typeInfo[fileType]
-                    typeInfo[fileType] = (fileInfo[0] + numPVs, fileInfo[1] + numTsValues)
+                    ( numPVs, numTsValues, numTimeouts ) = typeInfo[fileType]
+                    typeInfo[fileType] = (  fileInfo[0] + numPVs,
+                                            fileInfo[1] + numTsValues,
+                                            fileInfo[2] + numTimeouts )
                 else:
                     typeInfo[fileType] = fileInfo
-            print( "    FileTypes  NumLines NumTsValues" )
-            #      "    TTTTTTTTTT NNNNNNNN TTTTTTTTTTT" )
+            print( "    FileTypes  NumLines NumTsValues NumTimeouts" )
+            #      "    TTTTTTTTTT NNNNNNNN TTTTTTTTTTT TTTTTTTTTTT" )
             for fileType in typeInfo:
-                ( numPVs, numTsValues ) = typeInfo[fileType]
-                print(  "    %-10s %8u %11u" % (fileType, numPVs, numTsValues) )
+                ( numPVs, numTsValues, numTimeouts ) = typeInfo[fileType]
+                print(  "    %-10s %8u %11u %11u" % (fileType, numPVs, numTsValues, numTimeouts) )
 
         # Show clients
         if len(self._testClients):
@@ -100,7 +107,7 @@ class stressTest:
             numPVs           = client.getNumPVs()
             numTsValues      = client.getNumTsValues()
             numMissed        = client.getNumMissed()
-            numTimeouts      = client.getNumMissed()
+            numTimeouts      = client.getNumTimeouts()
             #tsRates          = client.getTsRates()
             #tsMissRates      = client.getTsMissRates()
             if level >= 2:
@@ -116,25 +123,35 @@ class stressTest:
                         tsRates          = testPV.getTsRates()
                         sortedKeys = list(tsRates.keys())
                         sortedKeys.sort()
-                        numShow = min( 20, len(sortedKeys) )
-                        print( "        ValueRates: First %u seconds" % numShow )
-                        print( "        [", end='' )
+                        numShow = min( 10, len(sortedKeys) )
+                        print( "        ValueRates: First %u: [ " % numShow, end='' )
                         for t in sortedKeys[0:numShow-2]:
-                            print( "%4u" % tsRates[t], end=', ' )
-                        t = sortedKeys[numShow-1]
-                        print( "%4u" % tsRates[t] )
+                            print( "(%.3f, %4u), " % ( t, tsRates[t] ), end=', ' )
+                        if len(sortedKeys) > 0:
+                            t = sortedKeys[numShow-1]
+                            print( "(%.3f,%4u) ]" % ( t, tsRates[t] ) )
 
                         tsMissRates      = testPV.getTsMissRates()
-                        numShow = min( 20, len(tsMissRates.keys()) )
-                        print( "        MissedValueRates: First %u seconds" % numShow )
-                        print( "        [", end='' )
+                        numShow = min( 10, len(tsMissRates.keys()) )
+                        print( "        TsMissedRates: First %u: [ " % numShow, end='' )
                         for t in list( tsMissRates.keys() )[0:numShow-2]:
-                            print( "%4u" % tsMissRates[t], end=', ' )
-                        t = list( tsMissRates.keys() )[numShow-1]
-                        print( "%4u" % tsMissRates[t] )
+                            print( "(%.3f, %4u), " % ( t, tsMissRates[t] ), end=', ' )
+                        if len(tsMissRates) > 0:
+                            t = list( tsMissRates.keys() )[numShow-1]
+                            print( "(%.3f, %4u) ]" % ( t, tsMissRates[t] ) )
 
-        print( "    %-30s %6u %11u %9u" % ( "Total" if level >= 2 else str(len(self._testClients)),
-                    self.getTotalNumPVs(), self.getTotalNumTsValues(), self.getTotalNumMissed() ) )
+                        timeoutRates         = testPV.getTimeoutRates()
+                        numShow = min( 10, len(timeoutRates.keys()) )
+                        print( "        TimeoutRates: First %u: [ " % numShow, end='' )
+                        for t in list( timeoutRates.keys() )[0:numShow-2]:
+                            print( "(%.3f, %4u), " % ( t, timeoutRates[t] ), end=', ' )
+                        if len(timeoutRates) > 0:
+                            t = list( timeoutRates.keys() )[numShow-1]
+                            print( "(%.3f, %4u) ]" % ( t, timeoutRates[t] ) )
+
+        print( "    %-30s %6u %11u %9u %8u" % ( "Total" if level >= 2 else str(len(self._testClients)),
+                    self.getTotalNumPVs(), self.getTotalNumTsValues(),
+                    self.getTotalNumMissed(), self.getTotalNumTimeouts() ) )
 
     def getClient( self, clientName, hostName ):
         clientPath = os.path.join( self._testPath, hostName, "clients", clientName )
@@ -164,10 +181,8 @@ class stressTest:
                 stressTestFile = None
                 if fileName.endswith( '.pvget' ):
                     stressTestFile = stressTestFilePVGet( filePath )
-                    # readPVGetClientFile( fileName )
                 elif fileName.endswith( 'pvCapture' ):
                     stressTestFile = stressTestFilePVCapture( filePath )
-                    #self.processPVCaptureFile( filePath )
                 #elif fileName.endswith( '.log' ):
                     # readLogFile( fileName )
                 #elif fileName.endswith( '.list' ):

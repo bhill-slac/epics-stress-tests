@@ -52,6 +52,7 @@ class stressTestClient:
         self._tsMissRates = {}      # Dict of cumulative miss rate for all client testPVs
         self._numMissed   = 0       # Number of cumulative missed counts for all client testPVs
         self._numTsValues = 0       # Number of timestamped values collected for all client testPVs
+        self._numTimeouts = 0       # Cumulative number of timeouts
         self._startTime   = None    # Earliest timestamp of all client testPVs
         self._endTime     = None    # Latest timestamp of all client testPVs
         self._clientType  = None
@@ -73,6 +74,8 @@ class stressTestClient:
             testPV = self._testPVs[pvName]
             numTsValues += testPV.getNumTsValues()
         return numTsValues
+    def getNumTimeouts( self ):
+        return self._numTimeouts
     def getEndTime( self ):
         return self._endTime
     def getStartTime( self ):
@@ -104,12 +107,20 @@ class stressTestClient:
             print(  "addTestFile Client %s, type %s Warning: Adding type %s" %
                     ( self._clientName, self._clientType, stressTestFile.getFileType() ) )
         self.addTsValues( pvName, stressTestFile.getTsValues() )
+        self.addTimeoutValues( pvName, stressTestFile.getTsTimeouts() )
 
     # stressTestClient.addTsValues
     def addTsValues( self, pvName, tsValues ):
         testPV = self.getTestPV( pvName )
         if testPV is not None:
             testPV.addTsValues( tsValues )
+
+    def addTimeoutValues( self, pvName, tsTimeouts ):
+        testPV = self.getTestPV( pvName )
+        if testPV is not None:
+            # tsTimeouts shares same [ [ timeStamp, value ] ]
+            # structure as tsValues, but value is always None
+            testPV.addTsValues( tsTimeouts )
 
     # stressTestClient.analyze
     def analyze( self ):
@@ -121,7 +132,8 @@ class stressTestClient:
         for pvName in self._testPVs:
             testPV = self._testPVs[pvName]
             testPV.analyze()
-            self._numMissed += testPV.getNumMissed()
+            self._numMissed   += testPV.getNumMissed()
+            self._numTimeouts += testPV.getNumTimeouts()
             if testPV.getStartTime() is not None:
                 if  self._startTime is None or self._startTime > testPV.getStartTime():
                     self._startTime = testPV.getStartTime()

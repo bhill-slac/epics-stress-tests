@@ -79,7 +79,7 @@ def readpvgetFile( filePath ):
         with open(filePath, 'r') as f:
             for line in f:
                 if line.startswith( 'Timeout' ):
-                    contents += TS_VALUE_TIMEOUT
+                    contents += [ TS_VALUE_TIMEOUT ]
                     continue
                 match = re.match( r"Read\s+\d+", line )
                 if match:
@@ -137,7 +137,8 @@ class stressTestFile:
         ( self._filePath, self._fileName ) = os.path.split( pathTopToFile )
         self._numLines = fileGetNumLines( pathTopToFile )
         self._tsValues = {}
-        self._timeoutList = {}
+        self._tsTimeouts = {}
+        self._numTimeouts = 0
 
     def getFileName( self ):
         return self._FilePath
@@ -152,16 +153,14 @@ class stressTestFile:
     def getTsValues( self ):
         return self._tsValues
     def getNumTimeouts( self ):
-        return len(self._timeoutList)
-    def getTimeouts( self ):
-        return self._timeoutList
+        return self._numTimeouts
+    def getTsTimeouts( self ):
+        return self._tsTimeouts
 
 class stressTestFilePVGet( stressTestFile ):
     def __init__( self, pathTopToFile ):
         super().__init__( pathTopToFile )
         self.processPVGetFile( pathTopToFile )
-        #self._timeoutList = {}
-        #self._numTimeouts = 0
 
     def getFileType( self ):
         return "pvget"
@@ -169,7 +168,7 @@ class stressTestFilePVGet( stressTestFile ):
     def processPVGetFile( self, pathTopToFile ):
         try:
             tsValueList = {}
-            self._timeoutList = {}
+            self._tsTimeouts = {}
             self._numTimeouts = 0
             priorTs = None
             contents = readpvgetFile( pathTopToFile )
@@ -177,22 +176,24 @@ class stressTestFilePVGet( stressTestFile ):
                 timeStamp = tsValue[0]  # timeStamp should be [ secPastEpoch, nsec ]
                 value = tsValue[1]
                 if value is None:
-                    self.numTimeouts = self.numTimeouts + 1
-                    if timeStamp[0] is None or timeStamp[1] is None:
+                    self._numTimeouts = self._numTimeouts + 1
+                    if timeStamp is None or timeStamp[0] is None or timeStamp[1] is None:
                         # Hack till I get timestamped timeouts in *.pvget
                         if priorTs is not None:
-                            timeStamp = priorTs
-                    if timeStamp[0] is not None and timeStamp[1] is not None:
-                        self._timeoutList[ timeStamp[0] + timeStamp[1]*1e-9 ] = self.numTimeouts
-                else:
+                            timeStamp = [ priorTs[0] + 2, priorTs[1] + 1 ]
+
+                if timeStamp[0] is not None and timeStamp[1] is not None:
                     self._tsValues[ timeStamp[0] + timeStamp[1]*1e-9 ] = value
+                    priorTs = timeStamp
 
         except InvalidStressTestCaptureFile as e:
             print( e )
-            pass
+            raise
+            #pass
         except BaseException as e:
-            print( "processPVCaptureFile Error: %s: %s" % ( pathTopToFile, e ) )
-            pass
+            print( "processPVGetFile Error: %s: %s" % ( pathTopToFile, e ) )
+            raise
+            #pass
 
 class stressTestFilePVCapture( stressTestFile ):
     def __init__( self, pathTopToFile ):

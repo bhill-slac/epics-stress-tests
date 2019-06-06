@@ -14,6 +14,7 @@ from stressTest import *
 
 def viewPlots( sTest, level=2, block=True ):
     plotMissRates( sTest, level=level, block=False )
+    plotTimeoutRates( sTest, level=level, block=False )
     plotCaptureRates( sTest, level=level, block=block )
 
 def plotCaptureRates( sTest, level=2, block=True ):
@@ -32,8 +33,8 @@ def plotCaptureRates( sTest, level=2, block=True ):
             continue
         testPVs = client.getTestPVs()
         for pvName in testPVs:
-            testPV = testPVs[pvName]
-            tsRates          = testPV.getTsRates()
+            testPV      = testPVs[pvName]
+            tsRates     = testPV.getTsRates()
             if len(tsRates) == 0:
                 continue
             times  = np.array( list( tsRates.keys()   ) )
@@ -86,6 +87,43 @@ def plotMissRates( sTest, level=2, block=True ):
         #legendFontProp = FontProperties()
         #legendFontProp.set_size('small')
         #ax1.legend( loc='best', prop=legendFontProp )
+        ax1.legend( loc='best', fontsize='small' )
+    plt.draw()
+    plt.show(block=block)
+
+def plotTimeoutRates( sTest, level=2, block=True ):
+    figTitle = 'stressTest %s pvget timeout Rates' % sTest._testName
+    #fig1 = plt.figure( figTitle, figsize=(20,30) )
+    fig1, ax1  = plt.subplots( 1, 1 )
+    ax1.set_title(figTitle)
+
+    startTime = sTest.getStartTime()
+    numPlots = 0
+    sortedClientNames = list(sTest._testClients.keys())
+    sortedClientNames.sort()
+    for clientName in sortedClientNames:
+        client = sTest._testClients[clientName]
+        if client.getClientType() != 'pvget':
+            continue
+        testPVs = client.getTestPVs()
+        for pvName in testPVs:
+            testPV          = testPVs[pvName]
+            timeoutRates    = testPV.getTimeoutRates()
+            if len(timeoutRates) == 0:
+                continue
+            times  = np.array( list( timeoutRates.keys()      ) )
+            values = np.array( list( timeoutRates.values() ) )
+            if startTime:
+                times  -= int(startTime)
+            plt.plot( times, values, label=pvName )
+            numPlots = numPlots + 1
+
+    if numPlots == 0:
+        print( "No PV timeout rate data to plot." )
+        return
+
+    if numPlots <= 10:
+        #ax1.legend( loc='upper right')
         ax1.legend( loc='best', fontsize='small' )
     plt.draw()
     plt.show(block=block)
@@ -150,4 +188,4 @@ if __name__ == '__main__':
     # Pre-exit cleanup
     #killProcesses()
 
-    sys.exit(status)
+    #sys.exit(status)
