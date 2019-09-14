@@ -1,0 +1,32 @@
+
+{% set data = load_setup_py_data() %}
+
+
+package:
+    name    : stressTest
+
+    version : {{ data.get('version') }}
+
+
+source:
+    path: ..
+
+requirements:
+    build:
+      - python
+      - setuptools
+
+    run:
+      - python
+
+test:
+    imports:
+      - stressTest
+
+    requires:
+      - pytest
+
+about:
+  home: https://github.com/slac-epics/epics-stress-tests
+  license: SLAC Open License
+  summary: Python scripts for distributed client/server EPICS CA and PVA network stress tests.
