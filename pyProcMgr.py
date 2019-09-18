@@ -83,11 +83,7 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
     logFile = None
     logFileName = None
     devnull = subprocess.DEVNULL
-    #procInput = devnull
-    procInput = None
     procInput = subprocess.PIPE
-    #procOutput = subprocess.STDOUT
-    procOutput = None
     procOutput = subprocess.PIPE
     procServExe = 'procServ'
     # Start w/ procServ executable and procServ parameters
@@ -104,7 +100,8 @@ def launchProcess( command, procNumber=0, procNameBase="pyProc_", basePort=40000
             print( "Error in os.makedirs( %s, mode=0o%o )" % ( logDir, 0o775 ) )
         logFileName	= os.path.join( logDir, procName + ".log" )
         if verbose:
-            print( "logDir=%s, logFileName=%s\n" % ( logDir, logFileName ) )
+            print( "logDir =%s" % ( logDir ) )
+            print( "logFile=%s" % ( logFileName ) )
     if useFgMode:
         procCmd += [ '-f' ]
         if logFileName is not None:
@@ -198,7 +195,7 @@ def pyProc_signal_handler( signum, frame ):
 
 # Install signal handler
 signal.signal( signal.SIGINT,  pyProc_signal_handler )
-#signal.signal( signal.SIGTERM, pyProc_signal_handler )
+signal.signal( signal.SIGTERM, pyProc_signal_handler )
 # Can't catch SIGKILL
 #signal.signal( signal.SIGKILL, pyProc_signal_handler )
 
