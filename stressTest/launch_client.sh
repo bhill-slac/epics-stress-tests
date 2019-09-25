@@ -87,7 +87,7 @@ mkdir -p $TEST_DIR
 source $SCRIPTDIR/exportStressTestEnv.sh
 
 # Generate PV list for clients
-$SCRIPTDIR/genPvLists.sh $TEST_TOP $CLIENT_NAME
+#$SCRIPTDIR/genPvLists.sh $TEST_TOP $CLIENT_NAME
 
 # Log start of test
 TEST_LOG=$TEST_DIR/${CLIENT_NAME}.log
@@ -101,7 +101,7 @@ if [ "$CLIENT_CMD" == "" ]; then
 	exit 1
 fi
 
-KILLER=$TEST_DIR/${CLIENT_NAME}.kill
+KILLER=$TEST_DIR/${CLIENT_NAME}.killer
 echo KILLER=$KILLER
 
 # Run test on host

@@ -34,6 +34,8 @@ import time
 
 procList = []
 activeTests = []
+testFutures = {}
+testExecutor = None
 
 def getDateTimeFromFile( filePath ):
     dateTime = None
@@ -60,7 +62,6 @@ class StressTest(object):
         self._pathToTestTop	= pathToTestTop
         self._clientList = []
         self._testDuration = None
-        self._testDuration = 10
         self._startTest = None
 
     def startTest( self ):
@@ -216,12 +217,12 @@ def getClientEnv( testTop, clientName, verbose=False ):
     clientEnv = getEnvFromFile( os.path.join( SCRIPTDIR, 'stressTestDefault.env' ), clientEnv, verbose=verbose )
     getEnvFromFile( os.path.join( testTop, '..', 'siteDefault.env' ), clientEnv, verbose=verbose )
     getEnvFromFile( os.path.join( testTop, 'siteDefault.env' ), clientEnv, verbose=verbose )
-    HOSTNAME = socket.gethostname()
-    TEST_HOST_DIR = os.path.join( testTop, HOSTNAME )
-    clientEnv[ 'HOSTNAME' ] = HOSTNAME
-    clientEnv[ 'TEST_HOST_DIR' ] = TEST_HOST_DIR
-    clientEnv[ 'TEST_DIR' ] = os.path.join( TEST_HOST_DIR, 'clients' )
-    getEnvFromFile( os.path.join( TEST_HOST_DIR, 'host.env' ), clientEnv, verbose=verbose )
+    #HOSTNAME = socket.gethostname()
+    #clientEnv[ 'HOSTNAME' ] = HOSTNAME
+    #TEST_HOST_DIR = os.path.join( testTop, HOSTNAME )
+    #clientEnv[ 'TEST_HOST_DIR' ] = TEST_HOST_DIR
+    #clientEnv[ 'TEST_DIR' ] = os.path.join( TEST_HOST_DIR, 'clients' )
+    #getEnvFromFile( os.path.join( TEST_HOST_DIR, 'host.env' ), clientEnv, verbose=verbose )
     getEnvFromFile( os.path.join( testTop, 'test.env' ), clientEnv, verbose=verbose )
 
     # Read env from clientName.env to get TEST_APPTYPE
@@ -252,47 +253,80 @@ def runRemote( *args, **kws ):
         print( "runRemote client %s unable to read test config!" % clientName )
         return
 
-    testStartDelay = clientConfig.get( 'testStartDelay', 0 )
-    if testStartDelay:
+    TEST_START_DELAY = clientConfig.get( 'TEST_START_DELAY', 0 )
+    if TEST_START_DELAY:
         try:
-            testStartDelay  = float(testStartDelay)
-            time.sleep( testStartDelay )
+            TEST_START_DELAY  = float(TEST_START_DELAY)
+            time.sleep( TEST_START_DELAY )
         except ValueError:
-            print( "client %s config has invalid testStartDelay: %s" % ( clientName, testStartDelay ) )
+            print( "client %s config has invalid TEST_START_DELAY: %s" % ( clientName, TEST_START_DELAY ) )
     else:
-        testStartDelay  = 0.0
+        TEST_START_DELAY  = 0.0
 
-    clientCmd = clientConfig.get('cmd')
-    clientCmd = expandMacros( clientCmd, clientEnv )
-    if hasMacros( clientCmd ):
-        print( "runRemote Error: clientCmd has unexpanded macros!\n\t%s\n" % clientCmd )
+    launcher = clientConfig.get('launcher')
+    launcher = expandMacros( launcher, clientEnv )
+    if hasMacros( launcher ):
+        print( "runRemote Error: launcher has unexpanded macros!\n\t%s\n" % launcher )
         return
-    hostName  = clientConfig.get('host')
+    hostName  = clientConfig.get('TEST_HOST')
+    if not hostName:
+        print( "runRemote Error: client %s TEST_HOST not specified!\n" % clientName )
+        return
     cmdList = [ 'ssh', '-t', '-t', hostName ]
-    cmdList += clientCmd.split()
+    cmdList += launcher.split()
     sshRemote = subprocess.Popen( cmdList, stdout=subprocess.PIPE )
     #testRemote = stressTestRemote( clientConfig )
     #testRemote.start()
 
-    testDuration = clientConfig.get( 'testDuration' )
-    if testDuration:
+    TEST_DURATION = clientConfig.get( 'TEST_DURATION' )
+    if TEST_DURATION:
         try:
-            testDuration  = float(testDuration)
-            print( "client %s sleeping for testDuration %f" % ( clientName, testDuration ) )
-            time.sleep( testDuration )
+            TEST_DURATION  = float(TEST_DURATION)
+            print( "client %s sleeping for TEST_DURATION %f" % ( clientName, TEST_DURATION ), flush=True )
+            time.sleep( TEST_DURATION )
         except ValueError:
-            print( "client %s config has invalid testDuration: %s" % ( clientName, testDuration ) )
+            print( "client %s config has invalid TEST_DURATION: %s" % ( clientName, TEST_DURATION ) )
 
-        print( "client %s terminate remote" % ( clientName ) )
+        print( "client %s terminate remote" % ( clientName ), flush=True )
         #testRemote.stop()
         sshRemote.terminate()
 
+    print( "client %s fetching output ..." % ( clientName ), flush=True )
     (out,err) = sshRemote.communicate()
+    print( "client %s done." % ( clientName ), flush=True )
     return out
 
-def generateClientPVLists( options ):
+def generateClientPVLists( testTop, config, verbose=False ):
     '''Create PV Lists for clients.'''
     # TODO: generate PV lists
+    totalPvList = []
+    servers = config.get( 'servers' )
+    for s in servers:
+        serverEnv	= getClientEnv( testTop, s.get('name'), verbose=verbose )
+        pvPrefix	= serverEnv[ 'TEST_PV_PREFIX' ]
+        nCounters	= int( serverEnv[ 'TEST_N_COUNTERS' ] )
+        nServers	= int( serverEnv[ 'TEST_N_SERVERS' ] )
+        for iServer in range( nServers ):
+            pvList = [ "%s%02u:Count%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
+            totalPvList += pvList
+        print( "%20s: " % ( s.get('name') ), end='' )
+        pprint.pprint( totalPvList )
+        print( flush=True )
+
+    clients = config.get( 'clients' )
+    nClients = len(clients)
+    nPvs = len(totalPvList)
+    nPvPerClient = int( len(totalPvList) / len(clients) )
+    for iClient in range( len(clients) ):
+        clientConfig = clients[iClient]
+        clientHost	= clientConfig.get( 'TEST_HOST' )
+        clientName	= clientConfig.get( 'name' )
+        clientPvList = totalPvList[ iClient : nPvPerClient - 1 : nClients ]
+        clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
+        os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
+        with open( clientPvFileName, 'w' ) as f:
+            for pv in clientPvList:
+                f.write( "%s\n" % pv )
     return
 
 def runTest( testTop, config, verbose=False ):
@@ -304,19 +338,24 @@ def runTest( testTop, config, verbose=False ):
     if verbose:
         print( "runTest %s for %d servers and %d clients:" % ( TEST_NAME, len(servers), len(clients) ) )
         for s in servers:
-            print( "%20s: host %16s, cmd: %s" % ( s.get('name'), s.get('host'), s.get('cmd') ) )
+            print( "%20s: host %16s, launcher: %s" % ( s.get('name'), s.get('TEST_HOST'), s.get('launcher') ) )
         for c in clients:
-            print( "%20s: host %16s, cmd: %s" % ( c.get('name'), c.get('host'), c.get('cmd') ) )
+            print( "%20s: host %16s, launcher: %s" % ( c.get('name'), c.get('TEST_HOST'), c.get('launcher') ) )
             #runRemote( config, c.get('name'), verbose=verbose )
+    
+    # Create PV lists
+    generateClientPVLists( testTop, config, verbose=verbose )
 
-    executor = concurrent.futures.ThreadPoolExecutor( max_workers=None )
-    testFutures = {}
+    global testExecutor
+    global testFutures
+    testExecutor = concurrent.futures.ThreadPoolExecutor( max_workers=None )
+    testFutures  = {}
     for c in servers:
         clientName = c.get('name')
-        testFutures[ executor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
+        testFutures[ testExecutor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
     for c in clients:
         clientName = c.get('name')
-        testFutures[ executor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
+        testFutures[ testExecutor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
 
     for future in concurrent.futures.as_completed( testFutures ):
         clientName = testFutures[future]
@@ -327,12 +366,14 @@ def runTest( testTop, config, verbose=False ):
         else:
             print( "clientResult for %s:" % ( clientName ) )
             if clientResult:
-                pprint.pprint( clientResult.decode() )
+                clientResult = clientResult.decode().splitlines()
+                for line in clientResult:
+                    print( "%s" % line )
             else:
                 print( clientResult )
 
-    print( "shutdown executor..." )
-    executor.shutdown( wait=True )
+    print( "shutdown testExecutor...", flush=True )
+    testExecutor.shutdown( wait=True )
     return
 
 def launchProcess( command, procNumber=0, procNameBase="stressTest_", basePort=40000, logDir=None, verbose=False ):
@@ -363,13 +404,13 @@ def launchProcess( command, procNumber=0, procNameBase="stressTest_", basePort=4
 
     cmdArgs = ' '.join(command).split()
     if verbose:
-        print( "launchProcess: %s %s\n" % ( ' '.join(cmdArgs) ) )
+        print( "launchProcess: %s %s\n" % ( ' '.join(cmdArgs) ), flush=True )
     proc = None
     try:
         proc = subprocess.Popen(	cmdArgs, stdin=procInput, stdout=procOutput, stderr=subprocess.STDOUT,
                                     env=procEnv, universal_newlines=True )
         if verbose:
-            print( "Launched %s with PID %d" % ( procName, proc.pid ) )
+            print( "Launched %s with PID %d" % ( procName, proc.pid ), flush=True )
     except ValueError as e:
         print( "launchProcess: ValueError" )
         print( e )
@@ -410,24 +451,33 @@ abortAll	= False
 def killProcesses( testDir = None ):
     global abortAll
     global procList
+    global testFutures
     abortAll = True
+    for future in testFutures:
+        clientName = testFutures[future]
+        print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
+        future.cancel()
+    testExecutor.shutdown( wait=True )
+
     for procTuple in procList:
         proc      = procTuple[0]
         procInput = procTuple[1]
         procPort  = procTuple[2]
         if proc is not None:
+            print( 'killProcesses: kill process on port %d' % ( procPort ), flush=True )
             killProcess( proc, procPort, verbose=True )
             procTuple[2] = None
         if hasattr( procInput, 'close' ):
             procInput.close()
+
     if testDir:
-        hostName = "cxi-daq"
-        print( 'Hack! Fix hostName in killProcesses()' )
-        for killFile in os.glob( os.path.join( testDir, "*", "*.killer" ) ):
+        for killFile in glob.glob( os.path.join( testDir, "*", "*.killer" ) ):
+            hostName = os.path.split( os.path.split( os.path.split(killFile)[0] )[0] )[1]
+            print( 'killProcesses: ssh %s %s' % ( hostName, killFile ), flush=True )
             subprocess.check_status( "ssh %s %s" % ( hostName, killFile ) )
 
 def stressTest_signal_handler( signum, frame ):
-    print( "\nstressTest_signal_handler: Received signal %d" % signum )
+    print( "\nstressTest_signal_handler: Received signal %d" % signum, flush=True )
     killProcesses()
 
 # Install signal handler
@@ -462,34 +512,34 @@ def main( options, argv=None):
     if options.verbose:
         print( "testDir=%s\n" % options.testDir )
 
-    # TODO: Get testConfig from testTop/test.cfg file
-    testConfig = {
-        'testName': 'oneHostOneCounter',
-        'servers': [
-            {
-                'name': 'loadServerA',
-                'host':	'cxi-daq',
-                'cmd':	'$SCRIPTDIR/launch_client.sh $TEST_TOP $CLIENT_NAME',
-            },
-            {
-                'name': 'loadServerB',
-                'host':	'cxi-control',
-                'cmd':	'$SCRIPTDIR/launch_client.sh $TEST_TOP $CLIENT_NAME',
-            }
-        ],
-        'clients': [
-            {
-                'name': 'pvCaptureA',
-                'host':	'cxi-daq',
-                'cmd':	'$SCRIPTDIR/launch_client.sh $TEST_TOP $CLIENT_NAME',
-                'testStartDelay': '0.5',
-                'testDuration': '10'
-            }
-        ]
-    }
+    testConfig = {}
+    clients = []
+    servers = []
+    # Read test.env
+    getEnvFromFile( os.path.join( options.testDir, "test.env" ), testConfig, verbose=options.verbose )
+    for envFile in glob.glob( os.path.join( options.testDir, "*.env" ) ):
+        baseName = os.path.split( envFile )[1]
+        if baseName == "test.env":
+            continue
+        if baseName.find( "Server" ) >= 0:
+            # Server configuration
+            serverConfig = {}
+            serverConfig[ 'name' ] = baseName.replace( ".env", "" )
+            serverConfig[ 'launcher'  ] = '$SCRIPTDIR/launch_client.sh $TEST_TOP $CLIENT_NAME'
+            getEnvFromFile( envFile, serverConfig, verbose=options.verbose )
+            servers.append( serverConfig )
+        else:
+            # Client configuration
+            clientConfig = {}
+            clientConfig[ 'name' ] = baseName.replace( ".env", "" )
+            clientConfig[ 'launcher'  ] = '$SCRIPTDIR/launch_client.sh $TEST_TOP $CLIENT_NAME'
+            getEnvFromFile( envFile, clientConfig, verbose=options.verbose )
+            clients.append( clientConfig )
+    testConfig[ 'servers' ] = servers
+    testConfig[ 'clients' ] = clients
 
     if testConfig:
-        return runTest( options.testDir, testConfig, verbose=True )
+        return runTest( options.testDir, testConfig, verbose=options.verbose )
 
     procNumber = 1
     testInProcess = False
