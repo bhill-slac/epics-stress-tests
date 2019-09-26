@@ -314,19 +314,20 @@ def generateClientPVLists( testTop, config, verbose=False ):
         print( flush=True )
 
     clients = config.get( 'clients' )
-    nClients = len(clients)
     nPvs = len(totalPvList)
-    nPvPerClient = int( len(totalPvList) / len(clients) )
-    for iClient in range( len(clients) ):
-        clientConfig = clients[iClient]
-        clientHost	= clientConfig.get( 'TEST_HOST' )
-        clientName	= clientConfig.get( 'name' )
-        clientPvList = totalPvList[ iClient : nPvPerClient - 1 : nClients ]
-        clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
-        os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
-        with open( clientPvFileName, 'w' ) as f:
-            for pv in clientPvList:
-                f.write( "%s\n" % pv )
+    for clientConfig in clients:
+        clientHost	 = clientConfig.get( 'TEST_HOST' )
+        clientName	 = clientConfig.get( 'name' )
+        nClients	 = int( clientConfig.get( 'TEST_N_CLIENTS' ) )
+        nClientsTotal= nClients * len(clients)
+        nPvPerClient = int( len(totalPvList) / nClientsTotal )
+        for iClient in range( nClients ):
+            clientPvList = totalPvList[ iClient : nPvPerClient + 1 : nClientsTotal ]
+            clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
+            os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
+            with open( clientPvFileName, 'w' ) as f:
+                for pv in clientPvList:
+                    f.write( "%s\n" % pv )
     return
 
 def runTest( testTop, config, verbose=False ):
