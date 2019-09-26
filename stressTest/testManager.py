@@ -251,7 +251,7 @@ def runRemote( *args, **kws ):
     clientConfig = getClientConfig( config, clientName )
     if not clientConfig:
         print( "runRemote client %s unable to read test config!" % clientName )
-        return
+        return None
 
     TEST_START_DELAY = clientConfig.get( 'TEST_START_DELAY', 0 )
     if TEST_START_DELAY:
@@ -291,10 +291,20 @@ def runRemote( *args, **kws ):
         #testRemote.stop()
         sshRemote.terminate()
 
-    print( "client %s fetching output ..." % ( clientName ), flush=True )
-    (out,err) = sshRemote.communicate()
-    print( "client %s done." % ( clientName ), flush=True )
-    return out
+    if True:
+        while True:
+            if verbose:
+                print( "client %s fetching output ..." % ( clientName ), flush=True )
+            try:
+                (out,err) = sshRemote.communicate( timeout=1 )
+                break
+            except subprocess.TimeoutExpired:
+                pass
+
+        print( "client %s done." % ( clientName ), flush=True )
+        return out
+    else:
+        return None
 
 def generateClientPVLists( testTop, config, verbose=False ):
     '''Create PV Lists for clients.'''
@@ -309,9 +319,8 @@ def generateClientPVLists( testTop, config, verbose=False ):
         for iServer in range( nServers ):
             pvList = [ "%s%02u:Count%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
             totalPvList += pvList
-        print( "%20s: " % ( s.get('name') ), end='' )
-        pprint.pprint( totalPvList )
-        print( flush=True )
+            if verbose:
+                print( "%20s%02d: %s" % ( s.get('name'), iServer, pvList ), flush=True )
 
     clients = config.get( 'clients' )
     nPvs = len(totalPvList)
@@ -329,6 +338,21 @@ def generateClientPVLists( testTop, config, verbose=False ):
                 for pv in clientPvList:
                     f.write( "%s\n" % pv )
     return
+
+def clientFetchResult( future ):
+    clientName = testFutures[future]
+    try:
+        clientResult = future.result()
+    except Exception as e:
+        print( "%s: Exception: %s" % ( clientName, e ) )
+    else:
+        print( "clientResult for %s:" % ( clientName ) )
+        if clientResult:
+            clientResult = clientResult.decode().splitlines()
+            for line in clientResult:
+                print( "%s" % line )
+        else:
+            print( clientResult )
 
 def runTest( testTop, config, verbose=False ):
     servers = config.get( 'servers' )
@@ -358,20 +382,14 @@ def runTest( testTop, config, verbose=False ):
         clientName = c.get('name')
         testFutures[ testExecutor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
 
-    for future in concurrent.futures.as_completed( testFutures ):
-        clientName = testFutures[future]
-        try:
-            clientResult = future.result()
-        except Exception as e:
-            print( "%s: Exception: %s" % ( clientName, e ) )
-        else:
-            print( "clientResult for %s:" % ( clientName ) )
-            if clientResult:
-                clientResult = clientResult.decode().splitlines()
-                for line in clientResult:
-                    print( "%s" % line )
-            else:
-                print( clientResult )
+    print( "Launched %d testFutures ..." % len(testFutures), flush=True )
+    for future in testFutures:
+        future.add_done_callback( clientFetchResult )
+
+    while True:
+        ( done, not_done ) = concurrent.futures.wait( testFutures, timeout=0.1 )
+        if len(not_done) == 0:
+            break
 
     print( "shutdown testExecutor...", flush=True )
     testExecutor.shutdown( wait=True )
@@ -454,6 +472,7 @@ def killProcesses( testDir = None ):
     global procList
     global testFutures
     abortAll = True
+    print( 'killProcesses: Canceling %d testFutures ...' % ( len(testFutures) ), flush=True )
     for future in testFutures:
         clientName = testFutures[future]
         print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
