@@ -16,6 +16,7 @@ import os
 import re
 import procServUtils
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -206,7 +207,7 @@ def process_options(argv):
     description =	'pyProcMgr supports launching one or more processes.\n' \
                 +	'Command strings w/ arguments should be quoted.\n' \
                 +	'pyProcMgr will run as long as any of it\'s child processes are still running,\n' \
-                +	'and if killed via Ctrl-C will kill any remaining child processes.'
+                +	'and if killed via Ctrl-C or SIGTERM will kill any remaining child processes.'
     epilog_fmt  =	'\nExamples:\n' \
                     'pyProcMgr pvget "-w1 TST:BaseVersion"\n'
     epilog = textwrap.dedent( epilog_fmt )
@@ -219,6 +220,7 @@ def process_options(argv):
     parser.add_argument( '-p', '--port',  action="store", type=int, default=40000, help='Base port number, procServ port is port + str(procNumber)' )
     parser.add_argument( '-n', '--name',  action="store", default="pyProc_", help='process basename, name is basename + str(procNumber)' )
     parser.add_argument( '-D', '--logDir',  action="store", default=None, help='log file directory.' )
+    parser.add_argument( '-k', '--killFile',  action="store", default=None, help='Kill file. Creates script to kill pyProcMgr instance.' )
 
     options = parser.parse_args( )
 
@@ -231,6 +233,17 @@ def main(argv=None):
     #if options.verbose:
     #	print( "Full Cmd: %s %s" % ( options.cmd, args ) )
     #	print( "logDir=%s\n" % options.logDir )
+
+    if options.killFile:
+        with open( options.killFile, "w" ) as f:
+            f.write( "#!/bin/sh\n" )
+            f.write( "kill %d\n" % os.getpid() )
+        rwxrxrx =	stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH	| \
+                    stat.S_IWUSR | \
+                    stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        os.chmod( options.killFile, rwxrxrx )
+        print( "Killer file: %s\n" % options.killFile )
+
     for procNumber in range(options.count):
         try:
             if abortAll:
