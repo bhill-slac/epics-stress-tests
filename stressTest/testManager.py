@@ -322,10 +322,59 @@ def runRemote( *args, **kws ):
     #print( "ssh output type is %s." % ( type(out) ), flush=True )
     return makePrintable( out )
 
+def generateGatewayPVLists( testTop, config, verbose=False ):
+    gwPrefix = config.get( 'TEST_GW_PREFIX' )
+    if not gwPrefix:
+        print( "generateClientPVLists: TEST_GW_PREFIX not defined." )
+        return
+    gwPvList = []
+    provider = config.get( 'TEST_PROVIDER' )
+    if provider == 'pva':
+        gwPvList.append( gwPrefix + 'cache' )
+        gwPvList.append( gwPrefix + 'clients' )
+        gwPvList.append( gwPrefix + 'ds:byhost:rx' )
+        gwPvList.append( gwPrefix + 'ds:byhost:tx' )
+        gwPvList.append( gwPrefix + 'ds:bypv:rx' )
+        gwPvList.append( gwPrefix + 'ds:bypv:tx' )
+        gwPvList.append( gwPrefix + 'refs' )
+        gwPvList.append( gwPrefix + 'stats' )
+        gwPvList.append( gwPrefix + 'us:byhost:rx' )
+        gwPvList.append( gwPrefix + 'us:byhost:tx' )
+        gwPvList.append( gwPrefix + 'us:bypv:rx' )
+        gwPvList.append( gwPrefix + 'us:bypv:tx' )
+    elif provider == 'ca':
+        gwPvList.append( gwPrefix + 'vctotal' )
+        gwPvList.append( gwPrefix + 'pvtotal' )
+        gwPvList.append( gwPrefix + 'connected' )
+        gwPvList.append( gwPrefix + 'active' )
+        gwPvList.append( gwPrefix + 'inactive' )
+        gwPvList.append( gwPrefix + 'unconnected' )
+        gwPvList.append( gwPrefix + 'connecting' )
+        gwPvList.append( gwPrefix + 'disconnected' )
+        gwPvList.append( gwPrefix + 'dead' )
+        gwPvList.append( gwPrefix + 'clientEventRate' )
+        gwPvList.append( gwPrefix + 'clientPostRate' )
+        gwPvList.append( gwPrefix + 'existTestRate' )
+        gwPvList.append( gwPrefix + 'loopRate' )
+        gwPvList.append( gwPrefix + 'cpuFract' )
+        gwPvList.append( gwPrefix + 'load' )
+        gwPvList.append( gwPrefix + 'serverEventRate' )
+        gwPvList.append( gwPrefix + 'serverPostRate' )
+    clientHost	 = clientConfig.get( 'TEST_HOST' )
+    clientName	 = clientConfig.get( 'name' )
+    nClients	 = int( clientConfig.get( 'TEST_N_CLIENTS' ) )
+    nClientsTotal= nClients * len(clients)
+    clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s' % ( clientName ), "pvs.list" )
+    os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
+    with open( clientPvFileName, 'w' ) as f:
+        for pv in gwPvList:
+            f.write( "%s\n" % pv )
+
 def generateClientPVLists( testTop, config, verbose=False ):
     '''Create PV Lists for clients.'''
-    # TODO: generate PV lists
-    totalPvList = []
+
+    allCounterPvs = []
+    allCircBuffPvs = []
     servers = config.get( 'servers' )
     for s in servers:
         serverEnv	= getClientEnv( testTop, s.get('name'), verbose=verbose )
@@ -333,21 +382,30 @@ def generateClientPVLists( testTop, config, verbose=False ):
         nCounters	= int( serverEnv[ 'TEST_N_COUNTERS' ] )
         nServers	= int( serverEnv[ 'TEST_N_SERVERS' ] )
         for iServer in range( nServers ):
-            pvList = [ "%s%02u:Count%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
-            totalPvList += pvList
+            CounterPvs  = [ "%s%02u:Count%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
+            CircBuffPvs = [ "%s%02u:CircBuff%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
+            allCounterPvs  += CounterPvs
+            allCircBuffPvs += CircBuffPvs
             if verbose:
-                print( "%20s%02d: %s" % ( s.get('name'), iServer, pvList ), flush=True )
+                print( "%20s%02d: %s" % ( s.get('name'), iServer, CounterPvs ), flush=True )
 
     clients = config.get( 'clients' )
-    nPvs = len(totalPvList)
+    nPvs = len(allCounterPvs)
     for clientConfig in clients:
+        appType  = clientConfig.get( 'TEST_APPTYPE' )
+        if appType == 'pvGetGateway':
+            generateGatewayPVLists( testTop, clientConfig, verbose=False )
+            continue
         clientHost	 = clientConfig.get( 'TEST_HOST' )
         clientName	 = clientConfig.get( 'name' )
         nClients	 = int( clientConfig.get( 'TEST_N_CLIENTS' ) )
         nClientsTotal= nClients * len(clients)
-        nPvPerClient = int( len(totalPvList) / nClientsTotal )
+        nPvPerClient = int( len(allCounterPvs) / nClientsTotal )
         for iClient in range( nClients ):
-            clientPvList = totalPvList[ iClient : nPvPerClient + 1 : nClientsTotal ]
+            if appType == 'pvGetArray':
+                clientPvList = allCircBuffPvs[ iClient : nPvPerClient + 1 : nClientsTotal ]
+            else:
+                clientPvList = allCounterPvs[ iClient : nPvPerClient + 1 : nClientsTotal ]
             clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
             os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
             with open( clientPvFileName, 'w' ) as f:
