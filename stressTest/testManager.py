@@ -37,6 +37,7 @@ procList = []
 activeTests = []
 testFutures = {}
 testExecutor = None
+testDir = None
 
 def makePrintable( rawOutput ):
     if isinstance( rawOutput, str ) and rawOutput.startswith( "b'" ):
@@ -291,7 +292,8 @@ def runRemote( *args, **kws ):
         return
     cmdList = [ 'ssh', '-t', '-t', hostName ]
     cmdList += launcher.split()
-    sshRemote = subprocess.Popen( cmdList, stdout=subprocess.PIPE )
+    sshRemote = subprocess.Popen( cmdList, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE )
+    #sshRemote = subprocess.Popen( cmdList, stdin=None, stdout=subprocess.PIPE )
     procList.append( sshRemote )
 
     TEST_DURATION = clientConfig.get( 'TEST_DURATION' )
@@ -307,21 +309,18 @@ def runRemote( *args, **kws ):
         #testRemote.stop()
         sshRemote.terminate()
 
-    if True:
-        while True:
-            if verbose:
-                print( "client %s fetching output ..." % ( clientName ), flush=True )
-            try:
-                (out,err) = sshRemote.communicate( timeout=1 )
-                break
-            except subprocess.TimeoutExpired:
-                pass
+    while True:
+        if verbose:
+            print( "client %s fetching output ...\r" % ( clientName ), flush=True )
+        try:
+            (out,err) = sshRemote.communicate( timeout=1 )
+            break
+        except subprocess.TimeoutExpired:
+            pass
 
-        print( "ssh client %s done." % ( clientName ), flush=True )
-        #print( "ssh output type is %s." % ( type(out) ), flush=True )
-        return makePrintable( out )
-    else:
-        return None
+    print( "ssh client %s done." % ( clientName ), flush=True )
+    #print( "ssh output type is %s." % ( type(out) ), flush=True )
+    return makePrintable( out )
 
 def generateClientPVLists( testTop, config, verbose=False ):
     '''Create PV Lists for clients.'''
@@ -418,37 +417,60 @@ def runTest( testTop, config, verbose=False ):
         future.add_done_callback( clientFetchResult )
 
     while True:
-        ( done, not_done ) = concurrent.futures.wait( testFutures, timeout=0.1 )
+        ( done, not_done ) = concurrent.futures.wait( testFutures, timeout=1.0 )
         if len(not_done) == 0:
             break
+        if verbose:
+            print( "Waiting on %d futures ...\r" % len(not_done) )
 
     print( "shutdown testExecutor...", flush=True )
     testExecutor.shutdown( wait=True )
     return
 
-def killProcesses( testDir = None ):
+def killProcesses( ):
     global procList
+    global testDir
     global testFutures
 
-    for proc in procList:
-        if proc is not None:
-            print( 'killProcesses: kill process %d' % ( proc.pid ), flush=True )
-            proc.kill()
-            #proc.terminate()
-
-    print( 'killProcesses: Canceling %d testFutures ...' % ( len(testFutures) ), flush=True )
-    for future in testFutures:
-        if not future.done():
-            clientName = testFutures[future]
-            print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
-            future.cancel()
-    testExecutor.shutdown( wait=True )
-
     if testDir:
+        killGlob = os.path.join( testDir, "*", "*.killer" )
+        print( 'killProcesses: Checking for killFiles: %s' % killGlob )
         for killFile in glob.glob( os.path.join( testDir, "*", "*.killer" ) ):
             hostName = os.path.split( os.path.split( os.path.split(killFile)[0] )[0] )[1]
             print( 'killProcesses: ssh %s %s' % ( hostName, killFile ), flush=True )
             subprocess.check_status( "ssh %s %s" % ( hostName, killFile ) )
+            time.sleep(0.5)
+
+    time.sleep(1.0)
+    for proc in procList:
+        if proc is not None and proc.returncode is None:
+            print( 'killProcesses: kill process %d' % ( proc.pid ), flush=True )
+            proc.kill()
+            #proc.terminate()
+
+    time.sleep(1.0)
+    print( 'killProcesses: Checking %d testFutures ...' % ( len(testFutures) ), flush=True )
+    # First kill clients
+    for future in testFutures:
+        if not future.done():
+            clientName = testFutures[future]
+            if clientName.find('Server') < 0:
+                print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
+                time.sleep(0.5)
+                future.cancel()
+
+    time.sleep(1.0)
+    # kill remaining futures
+    for future in testFutures:
+        if not future.done():
+            clientName = testFutures[future]
+            print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
+            time.sleep(0.5)
+            future.cancel()
+
+    print( 'killProcesses: Shutdown testExecutor', flush=True )
+    time.sleep(0.5)
+    testExecutor.shutdown( wait=True )
 
 def stressTest_signal_handler( signum, frame ):
     print( "\nstressTest_signal_handler: Received signal %d" % signum, flush=True )
@@ -484,6 +506,9 @@ def main( options, argv=None):
     #	print( "logDir=%s\n" % options.logDir )
     if options.verbose:
         print( "testDir=%s\n" % options.testDir )
+
+    global testDir
+    testDir = options.testDir
 
     testConfig = {}
     clients = []
