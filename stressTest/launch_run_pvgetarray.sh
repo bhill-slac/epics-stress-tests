@@ -1,6 +1,4 @@
 #!/bin/bash
-# TODO: Generate custom launch script for each client via python
-# Could replace all this w/ just running generated script remotely via procServ bash daemon.
 LAUNCH_SCRIPT=$(basename ${BASH_SOURCE[0]})
 SCRIPTDIR=`readlink -f $(dirname ${BASH_SOURCE[0]})`
 if [ $# -lt 2 -o "$1" == "-h" -o "$2" == "-h" -o "$1" == "--help" ]; then
@@ -27,12 +25,12 @@ function readIfFound()
 	fi
 }
 readIfFound $SCRIPTDIR/stressTestDefault.env
-readIfFound $SCRIPTDIR/stressTestDefault.env.local
 readIfFound $TEST_TOP/../siteDefault.env
 readIfFound $TEST_TOP/siteDefault.env
 readIfFound $TEST_HOST_DIR/host.env
 readIfFound $TEST_TOP/test.env
 readIfFound $TEST_TOP/${CLIENT_NAME}.env
+TEST_APPTYPE=run_pvgetarray
 readIfFound $SCRIPTDIR/${TEST_APPTYPE}Default.env
 # Read client env again so it can override TEST_APPTYPE defaults
 readIfFound $TEST_TOP/${CLIENT_NAME}.env
@@ -61,13 +59,6 @@ if [ ! -e "$PROCSERV" ]; then
 	exit 1
 fi
 
-LOADSERVER=`which loadServer`
-if [ ! -e "$LOADSERVER" ]; then
-	echo "Error: loadServer not found!"
-	exit 1
-fi
-LOADSERVER_BIN=`dirname $LOADSERVER`
-LOADSERVER_TOP=`readlink -f $LOADSERVER_BIN/../..`
 
 # Make sure we can find pyProcMgr.py
 #PYPROCMGR=`which pyProcMgr.py`
@@ -77,17 +68,6 @@ if [ ! -e "$PYPROCMGR" ]; then
 	exit 1
 fi
 
-PVCAPTURE=`which pvCapture`
-if [ ! -e "$PVCAPTURE" ]; then
-	echo "Error: pvCapture not found!"
-	exit 1
-fi
-
-PVGET=`which pvGet`
-if [ ! -e "$PVGET" ]; then
-	echo "Error: pvGet not found!"
-	exit 1
-fi
 
 TEST_DIR=$TEST_HOST_DIR/clients
 mkdir -p $TEST_DIR
@@ -97,6 +77,17 @@ source $SCRIPTDIR/exportStressTestEnv.sh
 
 # Generate PV list for clients
 #$SCRIPTDIR/genPvLists.sh $TEST_TOP $CLIENT_NAME
+TEST_PVS=''
+for (( S = 0; S < $TEST_N_SERVERS ; ++S )) do
+	if (( $S >= 10 )); then
+		PRE=${TEST_PV_PREFIX}$S
+	else
+		PRE=${TEST_PV_PREFIX}0$S
+	fi
+	TEST_PVS+=" $PRE:CircBuff\$PYPROC_ID"
+done
+export TEST_PVS
+#echo TEST_PVS=$TEST_PVS
 
 # Log start of test
 TEST_LOG=$TEST_DIR/${CLIENT_NAME}.log
@@ -115,6 +106,9 @@ echo KILLER=$KILLER
 
 #VERBOSE=" -v"
 
+# Kill any pending stuck pvgetarray related processes
+pkill -9 run_pvgetarray.sh
+
 # Run test on host
 #echo $PYPROCMGR $VERBOSE -c $TEST_N_CLIENTS -n $CLIENT_NAME \
 #	-p $TEST_BASEPORT -d $TEST_DELAY_PER_CLIENT -D $TEST_DIR \
@@ -123,5 +117,7 @@ echo KILLER=$KILLER
 $PYPROCMGR $VERBOSE -c $TEST_N_CLIENTS -n $CLIENT_NAME \
 	-p $TEST_BASEPORT -d $TEST_DELAY_PER_CLIENT -D $TEST_DIR \
 	-k $KILLER \
-	"$CLIENT_CMD"; \
+	"$SCRIPTDIR/run_pvgetarray.sh" '$TEST_DIR/$CLIENT_NAME$PYPROC_ID' \
+	'$TEST_PVS'; \
 echo Done: `date` | tee -a $TEST_LOG
+

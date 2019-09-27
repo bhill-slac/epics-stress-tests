@@ -1,5 +1,5 @@
-export CLIENT_ROOT
-export HOSTNAME
+export CLIENT_NAME
+export HOST_NAME
 export LAUNCH_SCRIPT
 export LOADSERVER
 export LOADSERVER_BIN

@@ -112,10 +112,11 @@ $TEST\_TOP/*hostname*/clients/client*A*00/*pvName*.pvCapture clientA00 PV data f
 SCRIPTDIR           path to StressTestClients-git TOP
 
 # Set in client env files (i.e. $TEST\_TOP/clientFoo.env for clientFoo)
-APPTYPE             Test type: loadServer, pvCapture, pvGet, run\_pvget, run\_pvgetarray
+APPTYPE             Test type: loadServer, pvCapture, pvGet, pvGetGateway, run\_pvget, run\_pvgetarray
 * loadServer:               Runs a loadServer EPICS IOC (See below for loadServer github URL)
 * pvCapture:                Runs a stressTest pvCapture app
 * pvGet:                    Runs a stressTest pvGet app
+* pvGetGateway:             Runs a stressTest pvGet app to capture gateway stats
 * run\_pvget:                Runs stressTest script run\_pvget.sh that captures output of EPICS pvget. (deprecated)
 * run\_pvgetarray:           Runs stressTest script run\_pvgetarray.sh.  Dumps output of pvget but logs timestamp and number elements read.
 
