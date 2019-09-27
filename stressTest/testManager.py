@@ -25,6 +25,7 @@ import pprint
 #import procServUtils
 import signal
 import socket
+import string
 import subprocess
 import sys
 import tempfile
@@ -36,6 +37,22 @@ procList = []
 activeTests = []
 testFutures = {}
 testExecutor = None
+
+def makePrintable( rawOutput ):
+    if isinstance( rawOutput, str ) and rawOutput.startswith( "b'" ):
+        rawOutput = eval(rawOutput)
+    if isinstance( rawOutput, bytes ):
+        rawOutput = rawOutput.decode()
+    if isinstance( rawOutput, list ):
+        filtered = []
+        for line in rawOutput:
+            filtered.append( makePrintable( line ) )
+        return filtered
+    if not isinstance( rawOutput, str ):
+        return str(rawOutput)
+    # Filter string for printable characters
+    printable = string.printable.replace( '\r', '' )
+    return ''.join(c for c in rawOutput if c in printable )
 
 def getDateTimeFromFile( filePath ):
     dateTime = None
@@ -301,8 +318,9 @@ def runRemote( *args, **kws ):
             except subprocess.TimeoutExpired:
                 pass
 
-        print( "client %s done." % ( clientName ), flush=True )
-        return out
+        print( "ssh client %s done." % ( clientName ), flush=True )
+        #print( "ssh output type is %s." % ( type(out) ), flush=True )
+        return makePrintable( out )
     else:
         return None
 
@@ -348,9 +366,23 @@ def clientFetchResult( future ):
     else:
         print( "clientResult for %s:" % ( clientName ) )
         if clientResult:
-            clientResult = clientResult.decode().splitlines()
-            for line in clientResult:
-                print( "%s" % line )
+            #print( "clientResult type is %s." % ( type(clientResult) ), flush=True )
+            #if isinstance( clientResult, str ) and clientResult.startswith( "b'" ):
+            #	clientResult = eval(clientResult)
+            #	print( "eval clientResult type is %s." % ( type(clientResult) ), flush=True )
+            #if isinstance( clientResult, bytes ):
+            #	clientResult = clientResult.decode()
+            #	print( "decoded clientResult type is %s." % ( type(clientResult) ), flush=True )
+            clientResult = makePrintable( clientResult )
+            #print( "filtered clientResult type is %s." % ( type(clientResult) ), flush=True )
+            if isinstance( clientResult, list ):
+                for line in clientResult:
+                    print( "%s" % line )
+            else:
+                #if isinstance( clientResult, str ):
+                #	clientResult = clientResult.splitlines()
+                #	print( "split clientResult type is %s." % ( type(clientResult) ), flush=True )
+                print( clientResult )
         else:
             print( clientResult )
 
@@ -474,9 +506,10 @@ def killProcesses( testDir = None ):
     abortAll = True
     print( 'killProcesses: Canceling %d testFutures ...' % ( len(testFutures) ), flush=True )
     for future in testFutures:
-        clientName = testFutures[future]
-        print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
-        future.cancel()
+        if not future.done():
+            clientName = testFutures[future]
+            print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
+            future.cancel()
     testExecutor.shutdown( wait=True )
 
     for procTuple in procList:
@@ -502,7 +535,7 @@ def stressTest_signal_handler( signum, frame ):
 
 # Install signal handler
 signal.signal( signal.SIGINT,  stressTest_signal_handler )
-#signal.signal( signal.SIGTERM, stressTest_signal_handler )
+signal.signal( signal.SIGTERM, stressTest_signal_handler )
 # Can't catch SIGKILL
 #signal.signal( signal.SIGKILL, stressTest_signal_handler )
 
