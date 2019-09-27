@@ -33,7 +33,6 @@ import textwrap
 import threading
 import time
 
-procList = []
 activeTests = []
 testFutures = {}
 testExecutor = None
@@ -427,59 +426,6 @@ def runTest( testTop, config, verbose=False ):
     testExecutor.shutdown( wait=True )
     return
 
-def launchProcess( command, procNumber=0, procNameBase="stressTest_", basePort=40000, logDir=None, verbose=False ):
-    # No I/O supported or collected for these processes
-    procEnv = os.environ
-    procEnv['PYPROC_ID'] = "%02u" % procNumber
-    procName = "%s%02u" % ( procNameBase, procNumber )
-
-    #if verbose:
-    #	print( "launchProcess: Unexpanded command:\n\t%s\n" % command )
-
-    # Expand macros including PYPROC_ID in the command string
-    command = expandMacros( command, procEnv )
-    if hasMacros( command ):
-        print( "launchProcess Error: Command has unexpanded macros!\n\t%s\n" % command )
-        #print( procEnv )
-        return ( None, None )
-
-    logFile = None
-    logFileName = None
-    devnull = subprocess.DEVNULL
-    #procInput = devnull
-    procInput = None
-    procInput = subprocess.PIPE
-    #procOutput = subprocess.STDOUT
-    procOutput = None
-    procOutput = subprocess.PIPE
-
-    cmdArgs = ' '.join(command).split()
-    if verbose:
-        print( "launchProcess: %s %s\n" % ( ' '.join(cmdArgs) ), flush=True )
-    proc = None
-    try:
-        proc = subprocess.Popen(	cmdArgs, stdin=procInput, stdout=procOutput, stderr=subprocess.STDOUT,
-                                    env=procEnv, universal_newlines=True )
-        if verbose:
-            print( "Launched %s with PID %d" % ( procName, proc.pid ), flush=True )
-    except ValueError as e:
-        print( "launchProcess: ValueError" )
-        print( e )
-        pass
-    except OSError as e:
-        print( "launchProcess: OSError" )
-        print( e )
-        pass
-    except subprocess.CalledProcessError as e:
-        print( "launchProcess: CalledProcessError" )
-        print( e )
-        pass
-    except e:
-        print( "Unknown exception thrown" )
-        print( e )
-        pass
-    return ( proc, proc.stdin )
-
 def killProcess( proc, port, verbose=False ):
     #if verbose:
     #	print( "killProcess: %d" % proc.pid )
@@ -559,7 +505,6 @@ def process_options():
     return options 
 
 def main( options, argv=None):
-    global procList
     #if options.verbose:
     #	print( "logDir=%s\n" % options.logDir )
     if options.verbose:
@@ -591,66 +536,7 @@ def main( options, argv=None):
     testConfig[ 'servers' ] = servers
     testConfig[ 'clients' ] = clients
 
-    if testConfig:
-        return runTest( options.testDir, testConfig, verbose=options.verbose )
-
-    procNumber = 1
-    testInProcess = False
-    while True:
-        if abortAll:
-            break
-
-        #if testInProcess = True and currentTime > loadavgPriorTime + loadavgInterval:
-        #	loadavgDumpToHostLog()
-
-        startTest = False
-        startTestFiles = glob.glob( os.path.join( options.testDir, "startTest" ) )
-        for f in startTestFiles:
-            checkStartTest( f, options )
-
-        for test in activeTests:
-            test.monitorTest( )
-
-        time.sleep(1.0)
-            #clientList = getClientList()
-            #for client in clientList:
-            #	if client.host() != os.hostname():
-            #		continue
-            #testEnv = {}
-            # testEnv = readTestEnvFiles( $STRESSTEST_TOP/$TEST_NAME, testEnv )
-            # testEnv = client.testEnv()
-            # client.setup()
-            # client.launch()
-            #try:
-            #	( proc, procInput ) = launchProcess( [ options.cmd ] + options.arg,
-            #								procNameBase=options.name,
-            #								basePort=options.port,
-            #								logDir=options.logDir,
-            #	if proc is not None:
-            #		procNumber += 1
-            #		procList.append( [ proc, procInput, options.port + procNumber ] )
-            #								verbose=options.verbose )
-            #except BaseException as e:
-            #	print( "Error launching proc %d: %s %s" % ( procNumber, options.cmd, args ) )
-            #	break
-
-        # if currentTime >= startTime + testDuration:
-            #for client in clientList:
-            #	if client.host() != os.hostname():
-            #		continue
-            #	if currentTime >= client.stopTime()
-            #		client.stop()
-
-        #if getNumActiveClients() == 0:
-        #	testInProcess = False
-
-    #time.sleep(1)
-    #print( "Waiting for %d processes:" % len(procList) )
-    #for procTuple in procList:
-    #	procTuple[0].wait()
-
-    print( "Done:" )
-    return 0
+    return runTest( options.testDir, testConfig, verbose=options.verbose )
 
 if __name__ == '__main__':
     status = 0
