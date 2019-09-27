@@ -53,7 +53,7 @@ if [ -f $TEST_HOST_DIR/site_setup_env.sh ]; then
 	source $TEST_HOST_DIR/site_setup_env.sh;
 fi
 
-# Make sure we can find procServ and pyProcMgr.py
+# Make sure we can find procServ
 PROCSERV=`which procServ`
 if [ ! -e "$PROCSERV" ]; then
 	echo "Error: procServ not found!"
@@ -68,10 +68,12 @@ fi
 LOADSERVER_BIN=`dirname $LOADSERVER`
 LOADSERVER_TOP=`readlink -f $LOADSERVER_BIN/../..`
 
-PYPROCMGR=`which pyProcMgr.py`
+# Make sure we can find pyProcMgr.py
+#PYPROCMGR=`which pyProcMgr.py`
+PYPROCMGR=$SCRIPTDIR/pyProcMgr.py
 if [ ! -e "$PYPROCMGR" ]; then
 	echo "Error: pyProcMgr.py not found!"
-	exit 1
+	#exit 1
 fi
 
 PVCAPTURE=`which pvCapture`
@@ -104,12 +106,14 @@ fi
 KILLER=$TEST_DIR/${CLIENT_NAME}.killer
 echo KILLER=$KILLER
 
+#VERBOSE=" -v"
+
 # Run test on host
-echo $PYPROCMGR -v -c $TEST_N_CLIENTS -n $CLIENT_NAME \
-	-p $TEST_BASEPORT -d $TEST_DELAY_PER_CLIENT -D $TEST_DIR \
-	-k $KILLER \
-	"$CLIENT_CMD" | tee -a $TEST_LOG;
-$PYPROCMGR -v -c $TEST_N_CLIENTS -n $CLIENT_NAME \
+#echo $PYPROCMGR $VERBOSE -c $TEST_N_CLIENTS -n $CLIENT_NAME \
+#	-p $TEST_BASEPORT -d $TEST_DELAY_PER_CLIENT -D $TEST_DIR \
+#	-k $KILLER \
+#	"$CLIENT_CMD" | tee -a $TEST_LOG;
+$PYPROCMGR $VERBOSE -c $TEST_N_CLIENTS -n $CLIENT_NAME \
 	-p $TEST_BASEPORT -d $TEST_DELAY_PER_CLIENT -D $TEST_DIR \
 	-k $KILLER \
 	"$CLIENT_CMD"; \
