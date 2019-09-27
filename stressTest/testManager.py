@@ -292,8 +292,7 @@ def runRemote( *args, **kws ):
     cmdList = [ 'ssh', '-t', '-t', hostName ]
     cmdList += launcher.split()
     sshRemote = subprocess.Popen( cmdList, stdout=subprocess.PIPE )
-    #testRemote = stressTestRemote( clientConfig )
-    #testRemote.start()
+    procList.append( sshRemote )
 
     TEST_DURATION = clientConfig.get( 'TEST_DURATION' )
     if TEST_DURATION:
@@ -427,30 +426,16 @@ def runTest( testTop, config, verbose=False ):
     testExecutor.shutdown( wait=True )
     return
 
-def killProcess( proc, port, verbose=False ):
-    #if verbose:
-    #	print( "killProcess: %d" % proc.pid )
-
-    try:
-        if port is None:
-            proc.kill()
-        else:
-            #procServUtils.killProc( 'localhost', port )
-            print( "procServUtils.killProc( localhost, %d )\n" % port )
-    except:
-        proc.kill()
-
-def terminateProcess( proc, verbose=False ):
-    if verbose:
-        print( "terminateProcess: %d" % proc.pid )
-    proc.terminate()
-
-abortAll	= False
 def killProcesses( testDir = None ):
-    global abortAll
     global procList
     global testFutures
-    abortAll = True
+
+    for proc in procList:
+        if proc is not None:
+            print( 'killProcesses: kill process %d' % ( proc.pid ), flush=True )
+            proc.kill()
+            #proc.terminate()
+
     print( 'killProcesses: Canceling %d testFutures ...' % ( len(testFutures) ), flush=True )
     for future in testFutures:
         if not future.done():
@@ -458,17 +443,6 @@ def killProcesses( testDir = None ):
             print( 'killProcesses: Cancel future for %s' % ( clientName ), flush=True )
             future.cancel()
     testExecutor.shutdown( wait=True )
-
-    for procTuple in procList:
-        proc      = procTuple[0]
-        procInput = procTuple[1]
-        procPort  = procTuple[2]
-        if proc is not None:
-            print( 'killProcesses: kill process on port %d' % ( procPort ), flush=True )
-            killProcess( proc, procPort, verbose=True )
-            procTuple[2] = None
-        if hasattr( procInput, 'close' ):
-            procInput.close()
 
     if testDir:
         for killFile in glob.glob( os.path.join( testDir, "*", "*.killer" ) ):
