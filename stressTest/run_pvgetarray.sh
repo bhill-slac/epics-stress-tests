@@ -22,8 +22,8 @@ fi
 if [ -z "$TEST_PVGET_TIMEOUT" ]; then
 	TEST_PVGET_TIMEOUT=1
 fi
-if [ -z "$TEST_PVGET_SLEEP" ]; then
-	TEST_PVGET_SLEEP=1
+if [ -z "$TEST_PVGET_REPEAT" ]; then
+	TEST_PVGET_REPEAT=1
 fi
 
 NSAM=`caget -t -w 1 ${PVS[0]}.NSAM`
@@ -47,6 +47,6 @@ do
 	done
 	wait
 	#echo "pvgetarray jobs done"
-	sleep $TEST_PVGET_SLEEP
+	sleep $TEST_PVGET_REPEAT
 done
 
