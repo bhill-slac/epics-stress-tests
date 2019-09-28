@@ -16,6 +16,7 @@ import os
 import re
 import procServUtils
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -237,11 +238,11 @@ def main(argv=None):
     if options.killFile:
         with open( options.killFile, "w" ) as f:
             f.write( "#!/bin/sh\n" )
-            f.write( "kill %d\n" % os.getpid() )
-        rwxrxrx =	stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH	| \
+            f.write( "ssh %s kill -s 2 %d\n" % ( socket.gethostname(), os.getpid() ) )
+        rwxr_xr_x =	stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH	| \
                     stat.S_IWUSR | \
                     stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-        os.chmod( options.killFile, rwxrxrx )
+        os.chmod( options.killFile, rwxr_xr_x )
         print( "Killer file: %s\n" % options.killFile )
 
     for procNumber in range(options.count):

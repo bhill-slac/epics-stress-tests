@@ -91,10 +91,6 @@ class StressTest(object):
         except:
             pass
 
-        #testEnv = os.environ
-        #testEnv[ 'STRESS_TESTS' ] = '/reg/d/iocData/gwTest'
-        #testEnv[ 'TEST_NAME' ] = 'oneHostOneCounter'
-
     def stopTest( self ):
         print( "Stop:    %s" % self._pathToTestTop )
         activeTests.remove( self )
@@ -194,10 +190,10 @@ def hasMacros( strWithMacros ):
 
 def getClientConfig( config, clientName ):
     for c in config.get('servers'):
-        if c.get('name') == clientName:
+        if c.get('CLIENT_NAME') == clientName:
             return c
     for c in config.get('clients'):
-        if c.get('name') == clientName:
+        if c.get('CLIENT_NAME') == clientName:
             return c
     return None
 
@@ -225,36 +221,37 @@ def getEnvFromFile( fileName, env, verbose=False ):
         pass
     return env
 
-def getClientEnv( testTop, clientName, verbose=False ):
-    '''Starts from os environment then duplicates the readIfFound env handling in launch_client.sh.'''
-    clientEnv = dict(os.environ)
-    SCRIPTDIR = os.path.abspath( os.path.dirname( __file__ ) )
-    clientEnv[ 'CLIENT_NAME'] = clientName 
-    clientEnv[ 'TEST_TOP'] = testTop 
-    clientEnv[ 'SCRIPTDIR'] = SCRIPTDIR 
-    clientEnv = getEnvFromFile( os.path.join( SCRIPTDIR, 'stressTestDefault.env' ), clientEnv, verbose=verbose )
-    getEnvFromFile( os.path.join( testTop, '..', 'siteDefault.env' ), clientEnv, verbose=verbose )
-    getEnvFromFile( os.path.join( testTop, 'siteDefault.env' ), clientEnv, verbose=verbose )
-    #HOSTNAME = socket.gethostname()
-    #clientEnv[ 'HOSTNAME' ] = HOSTNAME
-    #TEST_HOST_DIR = os.path.join( testTop, HOSTNAME )
-    #clientEnv[ 'TEST_HOST_DIR' ] = TEST_HOST_DIR
-    #clientEnv[ 'TEST_DIR' ] = os.path.join( TEST_HOST_DIR, 'clients' )
-    #getEnvFromFile( os.path.join( TEST_HOST_DIR, 'host.env' ), clientEnv, verbose=verbose )
-    getEnvFromFile( os.path.join( testTop, 'test.env' ), clientEnv, verbose=verbose )
+def readClientConfig( clientConfig, clientName, verbose=False ):
+    '''Duplicates the readIfFound env handling in launch_client.sh.'''
+    clientConfig[ 'CLIENT_NAME' ] = clientName
+    SCRIPTDIR  = clientConfig[ 'SCRIPTDIR' ]
+    testTop    = clientConfig[ 'TEST_TOP' ]
+    getEnvFromFile( os.path.join( SCRIPTDIR, 'stressTestDefault.env' ), clientConfig, verbose=verbose )
+    getEnvFromFile( os.path.join( SCRIPTDIR, 'stressTestDefault.env.local' ), clientConfig, verbose=verbose )
+    getEnvFromFile( os.path.join( testTop, '..', 'siteDefault.env' ), clientConfig, verbose=verbose )
+    getEnvFromFile( os.path.join( testTop, 'siteDefault.env' ), clientConfig, verbose=verbose )
+    #getEnvFromFile( os.path.join( TEST_HOST_DIR, 'host.env' ), clientConfig, verbose=verbose )
+    getEnvFromFile( os.path.join( testTop, 'test.env' ), clientConfig, verbose=verbose )
 
     # Read env from clientName.env to get TEST_APPTYPE
-    getEnvFromFile( os.path.join( testTop, clientName + '.env' ), clientEnv, verbose=verbose )
-    if 'TEST_APPTYPE' in clientEnv:
-        getEnvFromFile( os.path.join( SCRIPTDIR, clientEnv['TEST_APPTYPE'] + 'Default.env' ), clientEnv, verbose=verbose )
+    if 'TEST_APPTYPE' in clientConfig:
+        print( "TODO: TEST_APPTYPE %s already defined in %s clientConfig!" % ( clientConfig['TEST_APPTYPE'], clientName ) )
+    else:
+        getEnvFromFile( os.path.join( testTop, clientName + '.env' ), clientConfig, verbose=verbose )
+    if 'TEST_APPTYPE' in clientConfig:
+        getEnvFromFile( os.path.join( SCRIPTDIR, clientConfig['TEST_APPTYPE'] + 'Default.env' ), clientConfig, verbose=verbose )
         # Reread env from clientName.env to override ${TEST_APPTYPE}Default.env
-        getEnvFromFile( os.path.join( testTop, clientName + '.env' ), clientEnv, verbose=verbose )
+        getEnvFromFile( os.path.join( testTop, clientName + '.env' ), clientConfig, verbose=verbose )
 
-    # Make sure PYPROC_ID isn't in the clientEnv so it doesn't get expanded
-    if 'PYPROC_ID' in clientEnv:
-        del clientEnv['PYPROC_ID']
+    # Make sure PYPROC_ID isn't in the clientConfig so it doesn't get expanded
+    if 'PYPROC_ID' in clientConfig:
+        del clientConfig['PYPROC_ID']
 
-    return clientEnv
+    # Expand macros in clientConfig
+    for key in clientConfig:
+        clientConfig[key] = expandMacros( clientConfig[key], clientConfig )
+
+    return clientConfig
 
 def runRemote( *args, **kws ):
     config = args[0]
@@ -265,7 +262,6 @@ def runRemote( *args, **kws ):
     if verbose:
         print( "runRemote client %s:" % clientName )
 
-    clientEnv = getClientEnv( testTop, clientName, verbose=verbose )
     clientConfig = getClientConfig( config, clientName )
     if not clientConfig:
         print( "runRemote client %s unable to read test config!" % clientName )
@@ -281,17 +277,17 @@ def runRemote( *args, **kws ):
     else:
         TEST_START_DELAY  = 0.0
 
-    launcher = clientConfig.get('launcher')
-    launcher = expandMacros( launcher, clientEnv )
-    if hasMacros( launcher ):
-        print( "runRemote Error: launcher has unexpanded macros!\n\t%s\n" % launcher )
+    TEST_LAUNCHER = clientConfig.get('TEST_LAUNCHER')
+    TEST_LAUNCHER = expandMacros( TEST_LAUNCHER, clientConfig )
+    if hasMacros( TEST_LAUNCHER ):
+        print( "runRemote Error: TEST_LAUNCHER has unexpanded macros!\n\t%s\n" % TEST_LAUNCHER )
         return
     hostName  = clientConfig.get('TEST_HOST')
     if not hostName:
         print( "runRemote Error: client %s TEST_HOST not specified!\n" % clientName )
         return
     cmdList = [ 'ssh', '-t', '-t', hostName ]
-    cmdList += launcher.split()
+    cmdList += TEST_LAUNCHER.split()
     sshRemote = subprocess.Popen( cmdList, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE )
     #sshRemote = subprocess.Popen( cmdList, stdin=None, stdout=subprocess.PIPE )
     procList.append( sshRemote )
@@ -322,13 +318,11 @@ def runRemote( *args, **kws ):
     #print( "ssh output type is %s." % ( type(out) ), flush=True )
     return makePrintable( out )
 
-def generateGatewayPVLists( testTop, config, verbose=False ):
-    gwPrefix = config.get( 'TEST_GW_PREFIX' )
-    if not gwPrefix:
-        print( "generateClientPVLists: TEST_GW_PREFIX not defined." )
-        return
+def generateGatewayPVLists( clientConfig, verbose=False ):
+    gwPrefix = clientConfig['TEST_GW_PREFIX']
+    testTop  = clientConfig['TEST_TOP']
+    provider = clientConfig['TEST_PROVIDER']
     gwPvList = []
-    provider = config.get( 'TEST_PROVIDER' )
     if provider == 'pva':
         gwPvList.append( gwPrefix + 'cache' )
         gwPvList.append( gwPrefix + 'clients' )
@@ -360,47 +354,51 @@ def generateGatewayPVLists( testTop, config, verbose=False ):
         gwPvList.append( gwPrefix + 'load' )
         gwPvList.append( gwPrefix + 'serverEventRate' )
         gwPvList.append( gwPrefix + 'serverPostRate' )
+    else:
+        print( "generateGatewayPVLists: Invalid TEST_PROVIDER: %s" % provider )
+        return
     clientHost	 = clientConfig.get( 'TEST_HOST' )
-    clientName	 = clientConfig.get( 'name' )
+    clientName	 = clientConfig.get( 'CLIENT_NAME' )
     nClients	 = int( clientConfig.get( 'TEST_N_CLIENTS' ) )
-    nClientsTotal= nClients * len(clients)
-    clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s' % ( clientName ), "pvs.list" )
+    clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s00' % ( clientName ), "pvs.list" )
     os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
+    print( "generateGatewayPVLists: Writing %d pvs to %s" % ( len(gwPvList), clientPvFileName ) )
     with open( clientPvFileName, 'w' ) as f:
         for pv in gwPvList:
             f.write( "%s\n" % pv )
 
 def generateClientPVLists( testTop, config, verbose=False ):
     '''Create PV Lists for clients.'''
-
     allCounterPvs = []
     allCircBuffPvs = []
     servers = config.get( 'servers' )
     for s in servers:
-        serverEnv	= getClientEnv( testTop, s.get('name'), verbose=verbose )
-        pvPrefix	= serverEnv[ 'TEST_PV_PREFIX' ]
-        nCounters	= int( serverEnv[ 'TEST_N_COUNTERS' ] )
-        nServers	= int( serverEnv[ 'TEST_N_SERVERS' ] )
+        serverConfig = getClientConfig( config, s.get('CLIENT_NAME') )
+        pvPrefix	= serverConfig[ 'TEST_PV_PREFIX' ]
+        nCounters	= int( serverConfig[ 'TEST_N_COUNTERS' ] )
+        nServers	= int( serverConfig[ 'TEST_N_SERVERS' ] )
         for iServer in range( nServers ):
             CounterPvs  = [ "%s%02u:Count%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
             CircBuffPvs = [ "%s%02u:CircBuff%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
             allCounterPvs  += CounterPvs
             allCircBuffPvs += CircBuffPvs
             if verbose:
-                print( "%20s%02d: %s" % ( s.get('name'), iServer, CounterPvs ), flush=True )
+                print( "%20s%02d: %s" % ( s.get('CLIENT_NAME'), iServer, CounterPvs ), flush=True )
 
     clients = config.get( 'clients' )
     nPvs = len(allCounterPvs)
     for clientConfig in clients:
         appType  = clientConfig.get( 'TEST_APPTYPE' )
         if appType == 'pvGetGateway':
-            generateGatewayPVLists( testTop, clientConfig, verbose=False )
+            generateGatewayPVLists( clientConfig, verbose=False )
             continue
         clientHost	 = clientConfig.get( 'TEST_HOST' )
-        clientName	 = clientConfig.get( 'name' )
+        clientName	 = clientConfig.get( 'CLIENT_NAME' )
         nClients	 = int( clientConfig.get( 'TEST_N_CLIENTS' ) )
         nClientsTotal= nClients * len(clients)
         nPvPerClient = int( len(allCounterPvs) / nClientsTotal )
+        print( "generateClientPVLists: nClients=%d, nClientsTotal=%d" % ( nClients, nClientsTotal ) )
+        print( "generateClientPVLists: nPvPerClient=%d, nPvs=%d, allCounterPvs=%d" % ( nPvPerClient, nPvs, len(allCounterPvs) ) )
         for iClient in range( nClients ):
             if appType == 'pvGetArray':
                 clientPvList = allCircBuffPvs[ iClient : nPvPerClient + 1 : nClientsTotal ]
@@ -408,6 +406,7 @@ def generateClientPVLists( testTop, config, verbose=False ):
                 clientPvList = allCounterPvs[ iClient : nPvPerClient + 1 : nClientsTotal ]
             clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
             os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
+            print( "generateClientPVLists: Writing %d of %d pvs to %s" % ( len(clientPvList), nPvs, clientPvFileName ) )
             with open( clientPvFileName, 'w' ) as f:
                 for pv in clientPvList:
                     f.write( "%s\n" % pv )
@@ -445,17 +444,19 @@ def clientFetchResult( future ):
 def runTest( testTop, config, verbose=False ):
     servers = config.get( 'servers' )
     clients = config.get( 'clients' )
-    config[ 'TEST_TOP' ] = testTop
-    TEST_NAME = os.path.split(testTop)[1]
-    config[ 'TEST_NAME' ] = TEST_NAME
+    TEST_NAME = config[ 'TEST_NAME' ]
     if verbose:
         print( "runTest %s for %d servers and %d clients:" % ( TEST_NAME, len(servers), len(clients) ) )
         for s in servers:
-            print( "%20s: host %16s, launcher: %s" % ( s.get('name'), s.get('TEST_HOST'), s.get('launcher') ) )
+            print( "%20s: host %16s, TEST_LAUNCHER: %s" % ( s.get('CLIENT_NAME'), s.get('TEST_HOST'), s.get('TEST_LAUNCHER') ) )
         for c in clients:
-            print( "%20s: host %16s, launcher: %s" % ( c.get('name'), c.get('TEST_HOST'), c.get('launcher') ) )
-            #runRemote( config, c.get('name'), verbose=verbose )
-    
+            print( "%20s: host %16s, TEST_LAUNCHER: %s" % ( c.get('CLIENT_NAME'), c.get('TEST_HOST'), c.get('TEST_LAUNCHER') ) )
+
+    # Update test configuration
+    with open( os.path.join( testTop, 'testConfig.json' ), 'w' ) as f:
+        f.write( '# Generated file: Updated on each test run from $TEST_TOP/*.env\n' )
+        pprint.pprint( config, stream = f )
+
     # Create PV lists
     generateClientPVLists( testTop, config, verbose=verbose )
 
@@ -464,10 +465,10 @@ def runTest( testTop, config, verbose=False ):
     testExecutor = concurrent.futures.ThreadPoolExecutor( max_workers=None )
     testFutures  = {}
     for c in servers:
-        clientName = c.get('name')
+        clientName = c.get('CLIENT_NAME')
         testFutures[ testExecutor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
     for c in clients:
-        clientName = c.get('name')
+        clientName = c.get('CLIENT_NAME')
         testFutures[ testExecutor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
 
     print( "Launched %d testFutures ..." % len(testFutures), flush=True )
@@ -496,7 +497,9 @@ def killProcesses( ):
         for killFile in glob.glob( os.path.join( testDir, "*", "*.killer" ) ):
             hostName = os.path.split( os.path.split( os.path.split(killFile)[0] )[0] )[1]
             print( 'killProcesses: ssh %s %s' % ( hostName, killFile ), flush=True )
-            subprocess.check_status( "ssh %s %s" % ( hostName, killFile ) )
+            #subprocess.check_status( "ssh %s %s" % ( hostName, killFile ) )
+            # killFile already has "ssh $host pid"
+            subprocess.check_status( "%s" % ( killFile ) )
             time.sleep(0.5)
 
     time.sleep(1.0)
@@ -533,6 +536,8 @@ def killProcesses( ):
 def stressTest_signal_handler( signum, frame ):
     print( "\nstressTest_signal_handler: Received signal %d" % signum, flush=True )
     killProcesses()
+    print( 'stressTest_signal_handler: done.', flush=True )
+    time.sleep(0.5)
 
 # Install signal handler
 signal.signal( signal.SIGINT,  stressTest_signal_handler )
@@ -552,7 +557,6 @@ def process_options():
     #parser.add_argument( 'cmd',  help='Command to launch.  Should be an executable file.' )
     #parser.add_argument( 'arg', nargs='*', help='Arguments for command line. Enclose options in quotes.' )
     parser.add_argument( '-v', '--verbose',  action="store_true", help='show more verbose output.' )
-    parser.add_argument( '-n', '--name',  action="store", default="stressTest_", help='process basename, name is basename + str(procNumber)' )
     parser.add_argument( '-t', '--testDir', action="store", required=True, help='Path to test directory. Can contain * and other glob syntax.' )
 
     options = parser.parse_args( )
@@ -569,28 +573,30 @@ def main( options, argv=None):
     testDir = options.testDir
 
     testConfig = {}
-    clients = []
     servers = []
+    clients = []
     # Read test.env
+    SCRIPTDIR = os.path.abspath( os.path.dirname( __file__ ) )
+    TEST_NAME = os.path.split(testDir)[1]
+    testConfig[ 'SCRIPTDIR'] = SCRIPTDIR 
+    testConfig[ 'TEST_NAME'] = TEST_NAME
+    testConfig[ 'TEST_TOP' ] = testDir
     getEnvFromFile( os.path.join( options.testDir, "test.env" ), testConfig, verbose=options.verbose )
     for envFile in glob.glob( os.path.join( options.testDir, "*.env" ) ):
         baseName = os.path.split( envFile )[1]
         if baseName == "test.env":
             continue
+
+        # Client configuration
+        clientConfig = testConfig.copy()
+        clientName = baseName.replace( ".env", "" )
+        readClientConfig( clientConfig, clientName, verbose=options.verbose )
+
         if baseName.find( "Server" ) >= 0:
-            # Server configuration
-            serverConfig = {}
-            serverConfig[ 'name' ] = baseName.replace( ".env", "" )
-            serverConfig[ 'launcher'  ] = '$SCRIPTDIR/launch_client.sh $TEST_TOP $CLIENT_NAME'
-            getEnvFromFile( envFile, serverConfig, verbose=options.verbose )
-            servers.append( serverConfig )
+            servers.append( clientConfig.copy() )
         else:
-            # Client configuration
-            clientConfig = {}
-            clientConfig[ 'name' ] = baseName.replace( ".env", "" )
-            clientConfig[ 'launcher'  ] = '$SCRIPTDIR/launch_client.sh $TEST_TOP $CLIENT_NAME'
-            getEnvFromFile( envFile, clientConfig, verbose=options.verbose )
-            clients.append( clientConfig )
+            clients.append( clientConfig.copy() )
+
     testConfig[ 'servers' ] = servers
     testConfig[ 'clients' ] = clients
 
