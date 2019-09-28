@@ -371,19 +371,37 @@ def generateClientPVLists( testTop, config, verbose=False ):
     '''Create PV Lists for clients.'''
     allCounterPvs = []
     allCircBuffPvs = []
+    allRatePvs = []
     servers = config.get( 'servers' )
     for s in servers:
         serverConfig = getClientConfig( config, s.get('CLIENT_NAME') )
         pvPrefix	= serverConfig[ 'TEST_PV_PREFIX' ]
+        serverHost	= serverConfig[ 'TEST_HOST' ]
+        serverName	= serverConfig[ 'CLIENT_NAME' ]
         nCounters	= int( serverConfig[ 'TEST_N_COUNTERS' ] )
         nServers	= int( serverConfig[ 'TEST_N_SERVERS' ] )
         for iServer in range( nServers ):
-            CounterPvs  = [ "%s%02u:Count%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
+            # Generate list of Count and CircBuff PVs for each server
+            CounterPvs  = [ "%s%02u:Count%02u"    % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
             CircBuffPvs = [ "%s%02u:CircBuff%02u" % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
+            RatePvs     = [ "%s%02u:Rate%02u"     % ( pvPrefix, iServer, n ) for n in range( nCounters ) ]
             allCounterPvs  += CounterPvs
             allCircBuffPvs += CircBuffPvs
+            allRatePvs += RatePvs
+
+            # Write server pvs.list (not read by loadServer)
+            # Each loadServer instance gets it's PV's via $TEST_DB
+            serverPvFileName = os.path.join( testTop, serverHost, 'clients', '%s%02u' % ( serverName, iServer ), "pvs.list" )
+            os.makedirs( os.path.dirname( serverPvFileName ), mode=0o775, exist_ok=True )
             if verbose:
-                print( "%20s%02d: %s" % ( s.get('CLIENT_NAME'), iServer, CounterPvs ), flush=True )
+                print( "generateClientPVLists: Writing %d pvs to\n%s" % ( len(CounterPvs) *3, serverPvFileName ) )
+            with open( serverPvFileName, 'w' ) as f:
+                for pv in CounterPvs:
+                    f.write( "%s\n" % pv )
+                for pv in CircBuffPvs:
+                    f.write( "%s\n" % pv )
+                for pv in RatePvs:
+                    f.write( "%s\n" % pv )
 
     clients = config.get( 'clients' )
     nPvs = len(allCounterPvs)
@@ -392,21 +410,21 @@ def generateClientPVLists( testTop, config, verbose=False ):
         if appType == 'pvGetGateway':
             generateGatewayPVLists( clientConfig, verbose=False )
             continue
-        clientHost	 = clientConfig.get( 'TEST_HOST' )
-        clientName	 = clientConfig.get( 'CLIENT_NAME' )
-        nClients	 = int( clientConfig.get( 'TEST_N_CLIENTS' ) )
-        nClientsTotal= nClients * len(clients)
-        nPvPerClient = int( len(allCounterPvs) / nClientsTotal )
-        print( "generateClientPVLists: nClients=%d, nClientsTotal=%d" % ( nClients, nClientsTotal ) )
-        print( "generateClientPVLists: nPvPerClient=%d, nPvs=%d, allCounterPvs=%d" % ( nPvPerClient, nPvs, len(allCounterPvs) ) )
+        clientHost	  = clientConfig[ 'TEST_HOST' ]
+        clientName	  = clientConfig[ 'CLIENT_NAME' ]
+        nClients	  = int( clientConfig[ 'TEST_N_CLIENTS' ] )
+        nClientsTotal = nClients * len(clients)
+        nPvPerClient  = int( len(allCounterPvs) / nClients )
         for iClient in range( nClients ):
             if appType == 'pvGetArray':
-                clientPvList = allCircBuffPvs[ iClient : nPvPerClient + 1 : nClientsTotal ]
+                clientPvList  = allCircBuffPvs[ iClient : len(allCircBuffPvs) : nClients ]
             else:
-                clientPvList = allCounterPvs[ iClient : nPvPerClient + 1 : nClientsTotal ]
-            clientPvFileName = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
+                clientPvList  = allCounterPvs[  iClient : len(allCounterPvs)  : nClients ]
+                clientPvList += allRatePvs[     iClient : len(allRatePvs)     : nClients ]
+            clientPvFileName  = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
             os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
-            print( "generateClientPVLists: Writing %d of %d pvs to %s" % ( len(clientPvList), nPvs, clientPvFileName ) )
+            if verbose:
+                print( "generateClientPVLists: Writing %d of %d pvs to\n%s" % ( len(clientPvList), nPvs, clientPvFileName ) )
             with open( clientPvFileName, 'w' ) as f:
                 for pv in clientPvList:
                     f.write( "%s\n" % pv )
@@ -492,7 +510,7 @@ def killProcesses( ):
     global testFutures
 
     if testDir:
-        killGlob = os.path.join( testDir, "*", "*.killer" )
+        killGlob = os.path.join( testDir, "*", "clients", "*.killer" )
         print( 'killProcesses: Checking for killFiles: %s' % killGlob )
         for killFile in glob.glob( os.path.join( testDir, "*", "*.killer" ) ):
             hostName = os.path.split( os.path.split( os.path.split(killFile)[0] )[0] )[1]
