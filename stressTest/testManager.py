@@ -414,14 +414,15 @@ def generateClientPVLists( testTop, testConfig, verbose=False ):
         clientHost	  = clientConfig[ 'TEST_HOST' ]
         clientName	  = clientConfig[ 'CLIENT_NAME' ]
         nClients	  = int( clientConfig[ 'TEST_N_CLIENTS' ] )
-        nClientsTotal = nClients * len(clients)
-        nPvPerClient  = int( len(allCounterPvs) / nClients )
+        nCircBuffPvs  = max( int( clientConfig[ 'TEST_MAX_CIRCBUFF_PER_CLIENT' ] ), len(allCircBuffPvs) )
+        nCounterPvs   = max( int( clientConfig[ 'TEST_MAX_COUNTER_PER_CLIENT'  ] ), len(allCounterPvs) )
+        nRatePvs      = max( int( clientConfig[ 'TEST_MAX_RATE_PER_CLIENT'     ] ), len(allRatePvs) )
         for iClient in range( nClients ):
             if appType == 'pvGetArray':
-                clientPvList  = allCircBuffPvs[ iClient : len(allCircBuffPvs) : nClients ]
+                clientPvList  = allCircBuffPvs[ iClient : nCircBuffPvs : nClients ]
             else:
-                clientPvList  = allCounterPvs[  iClient : len(allCounterPvs)  : nClients ]
-                clientPvList += allRatePvs[     iClient : len(allRatePvs)     : nClients ]
+                clientPvList  = allCounterPvs[  iClient : nCounterPvs  : nClients ]
+                clientPvList += allRatePvs[     iClient : nRatePvs     : nClients ]
             clientPvFileName  = os.path.join( testTop, clientHost, 'clients', '%s%02u' % ( clientName, iClient ), "pvs.list" )
             os.makedirs( os.path.dirname( clientPvFileName ), mode=0o775, exist_ok=True )
             if verbose:

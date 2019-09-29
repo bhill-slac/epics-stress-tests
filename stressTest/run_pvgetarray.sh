@@ -6,7 +6,11 @@ if [ $# -lt 2 ]; then
 fi
 TEST_DIR=$1
 shift
-PVS=$*
+if [ -f $1 ]; then
+	PVS=`cat $1`
+else
+	PVS=$*
+fi
 echo TEST_DIR=$TEST_DIR
 echo PVS=$PVS
 
@@ -27,9 +31,9 @@ if [ -z "$TEST_PVGET_REPEAT" ]; then
 fi
 
 NSAM=`caget -t -w 1 ${PVS[0]}.NSAM`
-if $? ; then
+if [ $? != 0 ]; then
 	NSAM=1
-endif
+fi
 export PV_SIZE=$(($NSAM * 8))
 echo PV_SIZE=$PV_SIZE
 
