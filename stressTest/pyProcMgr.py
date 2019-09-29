@@ -163,6 +163,7 @@ def killProcess( proc, port, verbose=False ):
     #if verbose:
     #	print( "killProcess: %d" % proc.pid )
 
+    print( "pyProcMgr killProcess: pid=%d port=%s" % ( proc.pid, port ) )
     try:
         if port is None:
             proc.kill()
@@ -197,6 +198,7 @@ def pyProc_signal_handler( signum, frame ):
 
 # Install signal handler
 signal.signal( signal.SIGINT,  pyProc_signal_handler )
+signal.signal( signal.SIGQUIT, pyProc_signal_handler )
 signal.signal( signal.SIGTERM, pyProc_signal_handler )
 # Can't catch SIGKILL
 #signal.signal( signal.SIGKILL, pyProc_signal_handler )

@@ -36,6 +36,7 @@ import time
 procList = []
 activeTests = []
 testFutures = {}
+testConfig = {}
 testExecutor = None
 testDir = None
 
@@ -188,11 +189,11 @@ def hasMacros( strWithMacros ):
         macrosFound = True
     return macrosFound
 
-def getClientConfig( config, clientName ):
-    for c in config.get('servers'):
+def getClientConfig( testConfig, clientName ):
+    for c in testConfig.get('servers'):
         if c.get('CLIENT_NAME') == clientName:
             return c
-    for c in config.get('clients'):
+    for c in testConfig.get('clients'):
         if c.get('CLIENT_NAME') == clientName:
             return c
     return None
@@ -254,15 +255,15 @@ def readClientConfig( clientConfig, clientName, verbose=False ):
     return clientConfig
 
 def runRemote( *args, **kws ):
-    config = args[0]
+    testConfig = args[0]
     clientName = args[1]
-    testTop = config[ 'TEST_TOP' ]
+    testTop = testConfig[ 'TEST_TOP' ]
     verbose = kws.get( 'verbose', False )
 
     if verbose:
         print( "runRemote client %s:" % clientName )
 
-    clientConfig = getClientConfig( config, clientName )
+    clientConfig = getClientConfig( testConfig, clientName )
     if not clientConfig:
         print( "runRemote client %s unable to read test config!" % clientName )
         return None
@@ -301,9 +302,9 @@ def runRemote( *args, **kws ):
         except ValueError:
             print( "client %s config has invalid TEST_DURATION: %s" % ( clientName, TEST_DURATION ) )
 
-        print( "client %s terminate remote" % ( clientName ), flush=True )
+        print( "client %s kill remote" % ( clientName ), flush=True )
         #testRemote.stop()
-        sshRemote.terminate()
+        sshRemote.kill()
 
     while True:
         if verbose:
@@ -324,13 +325,13 @@ def generateGatewayPVLists( clientConfig, verbose=False ):
     provider = clientConfig['TEST_PROVIDER']
     gwPvList = []
     if provider == 'pva':
-        gwPvList.append( gwPrefix + 'cache' )
-        gwPvList.append( gwPrefix + 'clients' )
+        #gwPvList.append( gwPrefix + 'cache' )
+        #gwPvList.append( gwPrefix + 'clients' )
         gwPvList.append( gwPrefix + 'ds:byhost:rx' )
         gwPvList.append( gwPrefix + 'ds:byhost:tx' )
         gwPvList.append( gwPrefix + 'ds:bypv:rx' )
         gwPvList.append( gwPrefix + 'ds:bypv:tx' )
-        gwPvList.append( gwPrefix + 'refs' )
+        #gwPvList.append( gwPrefix + 'refs' )
         gwPvList.append( gwPrefix + 'stats' )
         gwPvList.append( gwPrefix + 'us:byhost:rx' )
         gwPvList.append( gwPrefix + 'us:byhost:tx' )
@@ -367,14 +368,14 @@ def generateGatewayPVLists( clientConfig, verbose=False ):
         for pv in gwPvList:
             f.write( "%s\n" % pv )
 
-def generateClientPVLists( testTop, config, verbose=False ):
+def generateClientPVLists( testTop, testConfig, verbose=False ):
     '''Create PV Lists for clients.'''
     allCounterPvs = []
     allCircBuffPvs = []
     allRatePvs = []
-    servers = config.get( 'servers' )
+    servers = testConfig.get( 'servers' )
     for s in servers:
-        serverConfig = getClientConfig( config, s.get('CLIENT_NAME') )
+        serverConfig = getClientConfig( testConfig, s.get('CLIENT_NAME') )
         pvPrefix	= serverConfig[ 'TEST_PV_PREFIX' ]
         serverHost	= serverConfig[ 'TEST_HOST' ]
         serverName	= serverConfig[ 'CLIENT_NAME' ]
@@ -403,7 +404,7 @@ def generateClientPVLists( testTop, config, verbose=False ):
                 for pv in RatePvs:
                     f.write( "%s\n" % pv )
 
-    clients = config.get( 'clients' )
+    clients = testConfig.get( 'clients' )
     nPvs = len(allCounterPvs)
     for clientConfig in clients:
         appType  = clientConfig.get( 'TEST_APPTYPE' )
@@ -431,13 +432,19 @@ def generateClientPVLists( testTop, config, verbose=False ):
     return
 
 def clientFetchResult( future ):
-    clientName = testFutures[future]
+    global testConfig
+    clientName    = testFutures[future]
+    clientConfig  = getClientConfig( testConfig, clientName )
+    clientHost	  = clientConfig[ 'TEST_HOST' ]
+    testTop		  = clientConfig[ 'TEST_TOP' ]
+    clientOutFile = os.path.join( testTop, clientHost, 'clients', '%s.out' % clientName )
+    outFile = open( clientOutFile, 'w' )
     try:
         clientResult = future.result()
     except Exception as e:
         print( "%s: Exception: %s" % ( clientName, e ) )
     else:
-        print( "clientResult for %s:" % ( clientName ) )
+        print( "client %s is done." % ( clientName ) )
         if clientResult:
             #print( "clientResult type is %s." % ( type(clientResult) ), flush=True )
             #if isinstance( clientResult, str ) and clientResult.startswith( "b'" ):
@@ -450,19 +457,19 @@ def clientFetchResult( future ):
             #print( "filtered clientResult type is %s." % ( type(clientResult) ), flush=True )
             if isinstance( clientResult, list ):
                 for line in clientResult:
-                    print( "%s" % line )
+                    print( "%s" % line, file=outFile )
             else:
                 #if isinstance( clientResult, str ):
                 #	clientResult = clientResult.splitlines()
                 #	print( "split clientResult type is %s." % ( type(clientResult) ), flush=True )
-                print( clientResult )
+                print( clientResult, file=outFile )
         else:
-            print( clientResult )
+            print( clientResult, file=outFile )
 
-def runTest( testTop, config, verbose=False ):
-    servers = config.get( 'servers' )
-    clients = config.get( 'clients' )
-    TEST_NAME = config[ 'TEST_NAME' ]
+def runTest( testTop, testConfig, verbose=False ):
+    servers = testConfig.get( 'servers' )
+    clients = testConfig.get( 'clients' )
+    TEST_NAME = testConfig[ 'TEST_NAME' ]
     if verbose:
         print( "runTest %s for %d servers and %d clients:" % ( TEST_NAME, len(servers), len(clients) ) )
         for s in servers:
@@ -473,10 +480,10 @@ def runTest( testTop, config, verbose=False ):
     # Update test configuration
     with open( os.path.join( testTop, 'testConfig.json' ), 'w' ) as f:
         f.write( '# Generated file: Updated on each test run from $TEST_TOP/*.env\n' )
-        pprint.pprint( config, stream = f )
+        pprint.pprint( testConfig, stream = f )
 
     # Create PV lists
-    generateClientPVLists( testTop, config, verbose=verbose )
+    generateClientPVLists( testTop, testConfig, verbose=verbose )
 
     global testExecutor
     global testFutures
@@ -484,10 +491,10 @@ def runTest( testTop, config, verbose=False ):
     testFutures  = {}
     for c in servers:
         clientName = c.get('CLIENT_NAME')
-        testFutures[ testExecutor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
+        testFutures[ testExecutor.submit( runRemote, testConfig, clientName, verbose=verbose ) ] = clientName
     for c in clients:
         clientName = c.get('CLIENT_NAME')
-        testFutures[ testExecutor.submit( runRemote, config, clientName, verbose=verbose ) ] = clientName
+        testFutures[ testExecutor.submit( runRemote, testConfig, clientName, verbose=verbose ) ] = clientName
 
     print( "Launched %d testFutures ..." % len(testFutures), flush=True )
     for future in testFutures:
@@ -509,23 +516,23 @@ def killProcesses( ):
     global testDir
     global testFutures
 
-    if testDir:
-        killGlob = os.path.join( testDir, "*", "clients", "*.killer" )
-        print( 'killProcesses: Checking for killFiles: %s' % killGlob )
-        for killFile in glob.glob( os.path.join( testDir, "*", "*.killer" ) ):
-            hostName = os.path.split( os.path.split( os.path.split(killFile)[0] )[0] )[1]
-            print( 'killProcesses: ssh %s %s' % ( hostName, killFile ), flush=True )
-            #subprocess.check_status( "ssh %s %s" % ( hostName, killFile ) )
-            # killFile already has "ssh $host pid"
-            subprocess.check_status( "%s" % ( killFile ) )
-            time.sleep(0.5)
-
     time.sleep(1.0)
     for proc in procList:
         if proc is not None and proc.returncode is None:
             print( 'killProcesses: kill process %d' % ( proc.pid ), flush=True )
             proc.kill()
-            #proc.terminate()
+
+    if testDir:
+        time.sleep(1.0)
+        killGlob = os.path.join( testDir, "*", "clients", "*.killer" )
+        print( 'killProcesses: Checking for killFiles: %s' % killGlob )
+        for killFile in glob.glob( killGlob ):
+            hostName = os.path.split( os.path.split( os.path.split(killFile)[0] )[0] )[1]
+            print( 'killProcesses: ssh %s %s' % ( hostName, killFile ), flush=True )
+            #subprocess.run( "ssh %s %s" % ( hostName, killFile ) )
+            # killFile already has "ssh $host pid"
+            subprocess.run( "%s" % ( killFile ) )
+            time.sleep(0.5)
 
     time.sleep(1.0)
     print( 'killProcesses: Checking %d testFutures ...' % ( len(testFutures) ), flush=True )
@@ -590,6 +597,7 @@ def main( options, argv=None):
     global testDir
     testDir = options.testDir
 
+    global testConfig
     testConfig = {}
     servers = []
     clients = []
