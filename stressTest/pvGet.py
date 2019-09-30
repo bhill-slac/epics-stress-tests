@@ -67,9 +67,6 @@ class pvGetClient(object):
                         print( '%s: missed %d counts!' % ( pvName, newValue - expectedValue ) )
                 self._priorValue	= newValue
 
-            # Print pvName, timestamp, and value (pvget style output format)
-            print( '%s %s' % ( pvName, pvaValue ) )
-
             # Save value
             self.saveValue( pvName, raw_stamp, pvValue )
             return
@@ -94,17 +91,18 @@ class pvGetClient(object):
                         raw_stamp = fieldTs
                 fullName = pvName + '.' + fieldName
                 if pvField.getID().startswith( 'epics:nt/NTScalar:' ):
-                    # TODO: print w/ timestamp formatted like time.ctime
-                    print( '%s %s' % ( fullName, pvField['value'] ) )
                     self.saveValue( pvName + '.' + fieldName, raw_stamp, pvField['value'] )
 
         # TODO: Handle other nt types
 
     def saveValue( self, pvName, raw_stamp, value ):
-        # assert pvaValue.type() == Scalar:
+        # assert pvValue.type() == Scalar:
         if pvName not in self._history:
             self._history[ pvName ] = []
         self._history[ pvName ] += [ [ raw_stamp, value ] ]
+
+        strTimeStamp = time.strftime( "%Y-%m-%d %H:%M:%S", time.localtime( raw_stamp[0] ) )
+        print( '%s %s.%03d %s' % ( pvName, strTimeStamp, float(raw_stamp[1])/1e6, float(value) ) )
 
         if self._verbose:
             print( '%s: value raw_stamp = %s' % ( pvName, raw_stamp ) )
@@ -166,7 +164,7 @@ def main(argv=None):
         options.pvNames = [ 'PVA:GW:TEST:01:Count00', 'PVA:GW:TEST:02:Count00', 'PVA:GW:TEST:02:Count01' ]
     clients = []
     #_ctxt	= Context('pva')
-    #pvaValue = _ctxt.get( pvNames[0] )
+    #pvValue = _ctxt.get( pvNames[0] )
     for pvName in options.pvNames:
         clients.append( pvGetClient( pvName, provider=options.provider, verbose=options.verbose ) )
 
