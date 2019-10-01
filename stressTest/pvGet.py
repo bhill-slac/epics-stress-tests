@@ -29,7 +29,7 @@ _log	= logging.getLogger(__name__)
 
 
 class pvGetClient(object):
-    def __init__( self, pvName, monitor='False', provider='pva', timeout=5.0, throw=False, verbose=False, checkPriorCount=False ):
+    def __init__( self, pvName, monitor='False', provider='pva', timeout=5.0, repeat=1.0, throw=False, verbose=False, checkPriorCount=False ):
         self._lock = Lock()
         self._pvName = pvName
         self._history = {}
@@ -39,20 +39,27 @@ class pvGetClient(object):
         self._T = None
         self._Op = None
         self._noConnectionYet = True
+        self._shutDown = False
         self._throw = throw
+        self._repeat = repeat
         self._timeout = timeout
         self._verbose = verbose
         self._checkPriorCount = checkPriorCount
         self._ctxt = Context( provider )
         self._pvGetDone = threading.Event()
         self._pvGetPending = threading.Condition()
-        self._T = threading.Thread( target=self.pvGetTimeout, args=(self._timeout,self._throw,self._verbose) )
+        self._T = threading.Thread( target=self.pvGetTimeoutLoop, args=(self._timeout,self._throw,self._verbose) )
         self._T.start()
 
     def __del__( self ):
         if self._ctxt is not None:
             self._ctxt.close()
             self._ctxt = None
+
+    def is_alive( self ):
+        if not self._T:
+            return False
+        return self._T.is_alive()
 
     def pvMonitor( self ):
         # Monitor is is easy as p4p provides it.
@@ -62,48 +69,43 @@ class pvGetClient(object):
         # R._S = super(Context, self).monitor( name, R._event, request )
         # self._S = R
 
-    def pvGet( self, timeout=5.0, throw=False, verbose=True ):
-        # Async non-blocking get requires putting request on a work queue instead
-        # of calling Context.get()
-        
+    def pvGetInitiate( self, timeout=5.0, throw=False, verbose=True ):
         #pdb.set_trace()
         # This code block does a synchronous get()
         #return self._ctxt.get( self._pvName, self.callback )
 
-        value = None
+        # Initiate async non-blocking pvGet using a ClientOperation.
+        # self.pvGetCallback() handles the response and places it on self._Q
+        raw_get = super( Context, self._ctxt ).get
         with self._pvGetPending:
             try:
-                with self._lock:
-                    self._pvGetDone.clear()
-                    assert self._Op is None
-                    self._Op  = super( Context, self._ctxt ).get( self._pvName, self.pvGetCallback )
-                    self._pvGetPending.notify()
+                assert self._Op is None
+                self._Op = raw_get( self._pvName, self.pvGetCallback )
+                self._pvGetPending.notify()
             except:
                 raise
-        return value
+        return
 
     def pvGetCallback( self, cbData ):
-        print( "TODO: Do we need pvGetCallback()?" )
         value = self.callback( cbData )
-        assert self._Q:
+        assert self._Q
         try:
             self._Q.put_nowait( value )
         except:
             print( "pvGetCallback %s: Error queuing result" % self._pvName )
-        #with self._lock:
-        #	self._pvGetDone.set()
         return
 
-    def pvGetTimeout( self, timeout=5.0, throw=False, verbose=True ):
-        while True:
-            value = None
+    def pvGetTimeoutLoop( self, timeout=5.0, throw=False, verbose=True ):
+        while not self._shutDown:
             with self._pvGetPending:
                 # Wait for something to do.
                 self._pvGetPending.wait()
+            if self._shutDown:
+                break
 
+            # Get pvGet result from self._Q
             try:
-                if self._Q:
-                    value = self._Q.get( timeout=timeout )
+                result = self._Q.get( timeout=timeout )
             except Empty:
                 _log.debug( '%s: timeout after %s sec', self._pvName, timeout )
                 if throw:
@@ -115,12 +117,17 @@ class pvGetClient(object):
                             print( '%s: Closing ClientOperation ...' % ( self._pvName ) )
                         self._Op.close()
                         self._Op = None
-            if value is not None:
-                if verbose:
-                    print( '%s %s' % ( self._pvName, LazyRepr(value) ) )
-                _log.debug('pvGet: %s %s', self._pvName, LazyRepr(value))
-                if throw and isinstance(value, Exception):
-                    raise value
+            if throw and isinstance(result, Exception):
+                raise result
+
+            if self._repeat is None:
+                # Exit thread loop
+                self._shutDown = True
+            if self._shutDown:
+                break
+            time.sleep( self._repeat )
+            self.pvGetInitiate()
+
         return
 
     def pvName( self ):
@@ -282,9 +289,11 @@ def process_options(argv):
     parser = argparse.ArgumentParser( description=description, formatter_class=argparse.RawDescriptionHelpFormatter, epilog=epilog )
     parser.add_argument( 'pvNames', metavar='PV', nargs='+',
                         help='EPICS PVA pvNames Example: TEST:01:AnalogIn0', default=[] )
+    parser.add_argument( '-f', '--input_file_path', action='store', help='Read list of pvNames from this file.' )
     parser.add_argument( '-m', '--monitor',  action='store', help='Stay connected and monitor updates.' )
     parser.add_argument( '-p', '--provider', action='store', default='pva', help='PV provider protocol, default is pva.' )
-    parser.add_argument( '-f', '--input_file_path', action='store', help='Read list of pvNames from this file.' )
+    parser.add_argument( '-r', '--repeat', action='store', help='Repeat delay.' )
+    parser.add_argument( '-t', '--timeout', action='store', default='5.0', help='Timeout in sec.' )
     parser.add_argument( '-v', '--verbose',  action="store_true", help='show more verbose output.' )
 
     options = parser.parse_args( )
@@ -298,21 +307,25 @@ def main(argv=None):
     for pvName in options.pvNames:
         clients.append( pvGetClient( pvName, monitor=options.monitor, provider=options.provider, verbose=options.verbose ) )
 
-    if options.monitor:
-        for client in clients:
+    for client in clients:
+        if options.monitor:
             client.pvMonitor()
+        else:
+            client.pvGetInitiate()
 
-    repeat = None
     try:
         while True:
             if options.monitor:
                 time.sleep(5)
                 continue
-            for client in clients:
-                client.pvGet()
-            if repeat is None:
-                break
-            time.sleep( repeat )
+            else:
+                activeClients = False
+                for client in clients:
+                    if client.is_alive():
+                        activeClients = True
+                if not activeClients:
+                    break
+                time.sleep( 1 )
 
     except KeyboardInterrupt:
         pass
