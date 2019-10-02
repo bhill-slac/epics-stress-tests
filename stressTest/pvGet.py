@@ -91,10 +91,11 @@ class pvGetClient(object):
     def pvGetCallback( self, cbData ):
         print( "%s: Entering pvGetCallback" % self._pvName )
         result = self.callback( cbData )
+        #pdb.set_trace()
         assert self._Q
         try:
             self._Q.put_nowait( result )
-            print( "%s: Added result to queue. %d on queue." % ( self._pvName, len(self._Q) ) )
+            print( "%s: Added result to queue. %d on queue." % ( self._pvName, self._Q.qsize() ) )
         except:
             print( "pvGetCallback %s: Error queuing result" % self._pvName )
         return
@@ -103,9 +104,11 @@ class pvGetClient(object):
         # Get pvGet result from self._Q
         result = False
         try:
+            print( "%s: handleResult: Getting result from Q." % ( self._pvName ) )
             result = self._Q.get( timeout=self._timeout )
+            print( "%s: handleResult: Got result from Q: %s" % ( self._pvName, result ) )
         except Empty:
-            print( "%s: pvGetTimeoutLoop timeout waiting for result!" % self._pvName )
+            print( "%s: handleResult timeout after %s sec!" % ( self._pvName, self._timeout  ) )
             _log.debug( '%s: timeout after %s sec', self._pvName, self._timeout )
             if self._throw:
                 raise TimeoutError();
@@ -123,7 +126,8 @@ class pvGetClient(object):
             return False
 
         print( '%s result: %s' % ( self._pvName, result ) )
-        return result
+        #return result
+        return True
 
     def pvGetTimeoutLoop( self, timeout=5.0, throw=False, verbose=True ):
         print( "%s: Entering pvGetTimeoutLoop" % self._pvName )
@@ -131,12 +135,12 @@ class pvGetClient(object):
         while not self._shutDown:
             with self._pvGetPending:
                 # Wait for something to do.
+                print( "%s: pvGetTimeoutLoop calling wait_for." % ( self._pvName ) )
                 status = self._pvGetPending.wait_for( self.handleResult, timeout=timeout )
                 print( "%s: pvGetTimeoutLoop woke from wait_for: status %s" % ( self._pvName, status ) )
             if not status:
                 break
                     # pvGet timeout
-                
 
             if self._shutDown:
                 break
@@ -146,7 +150,9 @@ class pvGetClient(object):
                 self._shutDown = True
             if self._shutDown:
                 break
+            print( "%s: pvGetTimeoutLoop sleeping for %s" % ( self._pvName, self._repeat ) )
             time.sleep( self._repeat )
+            print( "%s: pvGetTimeoutLoop calling for pvGetInitiate." % ( self._pvName ) )
             self.pvGetInitiate()
 
         print( "%s: Exiting pvGetTimeoutLoop" % self._pvName )
@@ -241,7 +247,7 @@ class pvGetClient(object):
 
     def saveNtScalar( self, pvName, raw_stamp, pvValue ):
         if self._verbose:
-            print( '%s: ID=%s, type=%s' % ( pvName, pvValue.getID(), type(pvValue) ) )
+            print( '%s: type=%s' % ( pvName, type(pvValue) ) )
 
         if self._checkPriorCount:
             newValue = int(pvValue)
