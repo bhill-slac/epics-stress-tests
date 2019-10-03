@@ -108,8 +108,10 @@ class pvGetClient(object):
             result = self._Q.get( timeout=self._timeout )
             print( "%s: handleResult: Got result from Q: %s" % ( self._pvName, result ) )
         except Empty:
-            print( "%s: handleResult timeout after %s sec!" % ( self._pvName, self._timeout  ) )
-            _log.debug( '%s: timeout after %s sec', self._pvName, self._timeout )
+            curTime = time.time()
+            raw_stamp = ( int(curTime), int((curTime - int(curTime)) * 1e9) )
+            strTimeStamp = time.strftime( "%Y-%m-%d %H:%M:%S", time.localtime( raw_stamp[0] ) )
+            print( '%s %s.%03d Timeout' % ( self._pvName, strTimeStamp, float(raw_stamp[1])/1e6 ) )
             if self._throw:
                 raise TimeoutError();
         finally:
@@ -139,8 +141,8 @@ class pvGetClient(object):
                 status = self._pvGetPending.wait_for( self.handleResult, timeout=timeout )
                 print( "%s: pvGetTimeoutLoop woke from wait_for: status %s" % ( self._pvName, status ) )
             if not status:
-                break
-                    # pvGet timeout
+                # pvGet timeout
+                print( "%s: pvGetTimeoutLoop got status %d: Timeout." % ( self._pvName, status ) )
 
             if self._shutDown:
                 break
