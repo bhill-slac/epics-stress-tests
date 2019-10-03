@@ -293,6 +293,7 @@ class pvGetClient(object):
                 print( "Unable to write values to %s" % saveFile )
 
     def closeSubscription( self ):
+        self._shutDown	= True
         if self._S is not None:
             print( "Closing subscription to %s" % self._pvName )
             self._S.close()
