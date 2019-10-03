@@ -79,23 +79,21 @@ class pvGetClient(object):
         raw_get = super( Context, self._ctxt ).get
         with self._pvGetPending:
             try:
+                if self._Op is not None:
+                    print( "pvGetInitiate tid %s: self._Op is %s" % ( threading.get_ident(), self._Op ) );
                 assert self._Op is None
                 self._Op = raw_get( self._pvName, self.pvGetCallback )
-                print( "%s: Called raw_get, notify _pvGetPending" % self._pvName )
                 self._pvGetPending.notify()
             except:
                 raise
-        print( "%s: Exiting pvGetInitiate" % self._pvName )
         return
 
     def pvGetCallback( self, cbData ):
-        print( "%s: Entering pvGetCallback" % self._pvName )
         result = self.callback( cbData )
         #pdb.set_trace()
         assert self._Q
         try:
             self._Q.put_nowait( result )
-            print( "%s: Added result to queue. %d on queue." % ( self._pvName, self._Q.qsize() ) )
         except:
             print( "pvGetCallback %s: Error queuing result" % self._pvName )
         return
@@ -104,9 +102,7 @@ class pvGetClient(object):
         # Get pvGet result from self._Q
         result = False
         try:
-            print( "%s: handleResult: Getting result from Q." % ( self._pvName ) )
             result = self._Q.get( timeout=self._timeout )
-            print( "%s: handleResult: Got result from Q: %s" % ( self._pvName, result ) )
         except Empty:
             curTime = time.time()
             raw_stamp = ( int(curTime), int((curTime - int(curTime)) * 1e9) )
@@ -115,49 +111,43 @@ class pvGetClient(object):
             if self._throw:
                 raise TimeoutError();
         finally:
+            #with self._pvGetPending:
             with self._lock:
                 if self._Op:
                     if self._verbose:
-                        print( '%s: Closing ClientOperation ...' % ( self._pvName ) )
+                        print( '%s tid %d: Closing ClientOperation ...' % ( self._pvName, threading.get_ident() ) )
                     self._Op.close()
                     self._Op = None
         if isinstance(result, Exception):
-            print( '%s result is an exception: %s' % ( self._pvName, result ) )
             if self._throw:
                 raise result
             return False
 
-        print( '%s result: %s' % ( self._pvName, result ) )
-        #return result
         return True
 
     def pvGetTimeoutLoop( self, timeout=5.0, throw=False, verbose=True ):
+        # TODO: Why do we get assert failure on _Op w/o this print?
         print( "%s: Entering pvGetTimeoutLoop" % self._pvName )
         status = False
         while not self._shutDown:
             with self._pvGetPending:
                 # Wait for something to do.
-                print( "%s: pvGetTimeoutLoop calling wait_for." % ( self._pvName ) )
                 status = self._pvGetPending.wait_for( self.handleResult, timeout=timeout )
-                print( "%s: pvGetTimeoutLoop woke from wait_for: status %s" % ( self._pvName, status ) )
-            if not status:
-                # pvGet timeout
-                print( "%s: pvGetTimeoutLoop got status %d: Timeout." % ( self._pvName, status ) )
+            #if not status:
+            #	# pvGet timeout
+            #	print( "%s: pvGetTimeoutLoop got status %d: Timeout." % ( self._pvName, status ) )
 
             if self._shutDown:
                 break
 
             if self._repeat is None:
-                # Exit thread loop
                 self._shutDown = True
+
             if self._shutDown:
                 break
-            print( "%s: pvGetTimeoutLoop sleeping for %s" % ( self._pvName, self._repeat ) )
             time.sleep( self._repeat )
-            print( "%s: pvGetTimeoutLoop calling for pvGetInitiate." % ( self._pvName ) )
             self.pvGetInitiate()
 
-        print( "%s: Exiting pvGetTimeoutLoop" % self._pvName )
         return
 
     def pvName( self ):
@@ -168,14 +158,13 @@ class pvGetClient(object):
         if isinstance( cbData, (RemoteError, Disconnected, Cancelled)):
             if self._noConnectionYet and isinstance( cbData, Disconnected ):
                 return cbData
-            print( '%s: %s' % ( pvName, cbData ) )
+            if not isinstance( cbData, Cancelled ):
+                print( '%s: %s' % ( pvName, cbData ) )
             return cbData
 
-        print( "%s: Entering callback" % self._pvName )
         self._noConnectionYet = False
         pvValue = cbData
 
-        #pdb.set_trace()
         # Make sure we have a raw_stamp
         raw_stamp = None
         if hasattr( pvValue, 'raw_stamp' ):
