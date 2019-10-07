@@ -160,9 +160,13 @@ class pvGetClient(object):
         pvValue = cbData
 
         # Make sure we have a raw_stamp
+        #pdb.set_trace()
         raw_stamp = None
         if hasattr( pvValue, 'raw_stamp' ):
             raw_stamp = pvValue.raw_stamp 
+        #elif hasattr( pvValue, 'timestamp' ):
+        #	tsSec = pvValue.timestamp
+        #	raw_stamp = ( int(tsSec), int((tsSec - int(tsSec)) * 1e9) )
         elif isinstance( pvValue, dict ):
             if 'raw_stamp' in pvValue:
                 raw_stamp = pvValue[ 'raw_stamp' ]
@@ -171,9 +175,11 @@ class pvGetClient(object):
             if 'timeStamp' in pvValue:
                 raw_stamp = pvValue[ 'timeStamp' ] 
 
-        if not raw_stamp or raw_stamp[0]:
-            curTime = time.time()
-            raw_stamp = ( int(curTime), int((curTime - int(curTime)) * 1e9) )
+        if raw_stamp is None or len(raw_stamp) != 2 or raw_stamp[0] == 0:
+            if self._verbose:
+                print( "%s: No timestamp found.  Using TOD" % pvName )
+            tsSec = time.time()
+            raw_stamp = ( int(tsSec), int((tsSec - int(tsSec)) * 1e9) )
 
         if isinstance( pvValue, p4p.nt.scalar.ntwrappercommon ):
             self.saveNtScalar( pvName, raw_stamp, pvValue )
