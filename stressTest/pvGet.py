@@ -29,7 +29,7 @@ _log	= logging.getLogger(__name__)
 
 
 class pvGetClient(object):
-    def __init__( self, pvName, monitor='False', provider='pva', timeout=5.0, repeat=1.0, throw=False, verbose=False, checkPriorCount=False ):
+    def __init__( self, pvName, monitor='False', provider='pva', timeout=5.0, repeat=1.0, showValue=False, throw=False, verbose=False, checkPriorCount=False ):
         self._lock = Lock()
         self._pvName = pvName
         self._history = {}
@@ -42,6 +42,7 @@ class pvGetClient(object):
         self._shutDown = False
         self._throw = throw
         self._repeat = repeat
+        self._showValue = showValue
         self._timeout = timeout
         self._verbose = verbose
         self._checkPriorCount = checkPriorCount
@@ -90,12 +91,15 @@ class pvGetClient(object):
 
     def pvGetCallback( self, cbData ):
         result = self.callback( cbData )
+        self._ctxt.disconnect()
+        self._noConnectionYet = True
         #pdb.set_trace()
         assert self._Q
         try:
             self._Q.put_nowait( result )
         except:
             print( "pvGetCallback %s: Error queuing result" % self._pvName )
+
         return
 
     def handleResult( self ):
@@ -110,14 +114,7 @@ class pvGetClient(object):
             print( '%s %s.%03d Timeout' % ( self._pvName, strTimeStamp, float(raw_stamp[1])/1e6 ) )
             if self._throw:
                 raise TimeoutError();
-        finally:
-            #with self._pvGetPending:
-            with self._lock:
-                if self._Op:
-                    if self._verbose:
-                        print( '%s tid %d: Closing ClientOperation ...' % ( self._pvName, threading.get_ident() ) )
-                    self._Op.close()
-                    self._Op = None
+
         if isinstance(result, Exception):
             if self._throw:
                 raise result
@@ -127,12 +124,18 @@ class pvGetClient(object):
 
     def pvGetTimeoutLoop( self, timeout=5.0, throw=False, verbose=True ):
         # TODO: Why do we get assert failure on _Op w/o this print?
-        print( "%s: Entering pvGetTimeoutLoop" % self._pvName )
+        #print( "%s: Entering pvGetTimeoutLoop" % self._pvName )
         status = False
         while not self._shutDown:
             with self._pvGetPending:
                 # Wait for something to do.
                 status = self._pvGetPending.wait_for( self.handleResult, timeout=timeout )
+            if self._Op:
+                if self._verbose:
+                    print( '%s tid %d: Closing ClientOperation ...' % ( self._pvName, threading.get_ident() ) )
+                self._Op.close()
+                self._Op = None
+
             #if not status:
             #	# pvGet timeout
             #	print( "%s: pvGetTimeoutLoop got status %d: Timeout." % ( self._pvName, status ) )
@@ -146,6 +149,8 @@ class pvGetClient(object):
             if self._shutDown:
                 break
             time.sleep( self._repeat )
+            # self._Op should be cleared by handleResult
+            assert self._Op is None
             self.pvGetInitiate()
 
         return
@@ -229,9 +234,9 @@ class pvGetClient(object):
                         raw_stamp = fieldTs
                 fullName = pvName + '.' + fieldName
                 if isinstance( pvField, p4p.nt.scalar.ntwrappercommon ):
-                    return self.saveNtScalar( fullName, raw_stamp, pvField['value'] )
+                    cbData = self.saveNtScalar( fullName, raw_stamp, pvField['value'] )
                 elif pvField.getID().startswith( 'epics:nt/NTScalar:' ):
-                    return self.saveValue( fullName, raw_stamp, pvField['value'] )
+                    cbData = self.saveValue( fullName, raw_stamp, pvField['value'] )
 
         # TODO: Handle other nt types
         return cbData
@@ -254,13 +259,24 @@ class pvGetClient(object):
         return
 
     def saveValue( self, pvName, raw_stamp, value ):
+        #pdb.set_trace()
+        if isinstance( value, p4p.nt.scalar.ntnumericarray ):
+            if value.size == 0:
+                return
+            value = value[0]
+        if isinstance( value, list ):
+            if len(value) == 0:
+                return
+            value = value[0]
+
         # assert pvValue.type() == Scalar:
         if pvName not in self._history:
             self._history[ pvName ] = []
         self._history[ pvName ] += [ [ raw_stamp, value ] ]
 
-        strTimeStamp = time.strftime( "%Y-%m-%d %H:%M:%S", time.localtime( raw_stamp[0] ) )
-        print( '%s %s.%03d %s' % ( pvName, strTimeStamp, float(raw_stamp[1])/1e6, float(value) ) )
+        if self._showValue:
+            strTimeStamp = time.strftime( "%Y-%m-%d %H:%M:%S", time.localtime( raw_stamp[0] ) )
+            print( '%s %s.%03d %s' % ( pvName, strTimeStamp, float(raw_stamp[1])/1e6, float(value) ) )
 
         if self._verbose:
             print( '%s: value raw_stamp = %s' % ( pvName, raw_stamp ) )
@@ -310,13 +326,15 @@ def process_options(argv):
             + 'pvGet.py  TEST:01:AnalogIn0 TEST:02:Dig1\n'
     epilog = textwrap.dedent( epilog_fmt )
     parser = argparse.ArgumentParser( description=description, formatter_class=argparse.RawDescriptionHelpFormatter, epilog=epilog )
-    parser.add_argument( 'pvNames', metavar='PV', nargs='+',
+    parser.add_argument( 'pvNames', metavar='PV', nargs='*',
                         help='EPICS PVA pvNames Example: TEST:01:AnalogIn0', default=[] )
-    parser.add_argument( '-f', '--input_file_path', action='store', help='Read list of pvNames from this file.' )
-    parser.add_argument( '-m', '--monitor',  action='store', help='Stay connected and monitor updates.' )
+    parser.add_argument( '-D', '--dirpath', action='store', default='/tmp/pvGetTest', help='Directory path where captured values are saved to <dirpath>/<pvname>,\n\tDefault dirpath: /tmp/pvGetTest' )
+    parser.add_argument( '-f', '--filename', action='store', help='Read list of pvNames from this file.' )
+    parser.add_argument( '-C', '--capture',  action='store_true', help='Stay connected and monitor updates.' )
+    parser.add_argument( '-S', '--showValue',  action='store_true', help='Show values as they are acquired.' )
     parser.add_argument( '-p', '--provider', action='store', default='pva', help='PV provider protocol, default is pva.' )
-    parser.add_argument( '-r', '--repeat', action='store', type=float, help='Repeat delay.' )
-    parser.add_argument( '-t', '--timeout', action='store', type=float, default='5.0', help='Timeout in sec.' )
+    parser.add_argument( '-R', '--repeat', action='store', type=float, help='Repeat delay.' )
+    parser.add_argument( '-w', '--timeout', action='store', type=float, default='5.0', help='Timeout in sec.' )
     parser.add_argument( '-v', '--verbose',  action="store_true", help='show more verbose output.' )
 
     options = parser.parse_args( )
@@ -326,21 +344,31 @@ def process_options(argv):
 def main(argv=None):
     options = process_options(argv)
 
+    if options.filename:
+        with open( options.filename, "r" ) as f:
+            lines = f.readlines()
+        for line in lines:
+            line = line.strip().split()[0]
+            if line.startswith( '#' ) or len(line) == 0:
+                continue
+            options.pvNames.append( line )
+
     clients = []
     for pvName in options.pvNames:
-        clients.append( pvGetClient( pvName, monitor=options.monitor,
+        clients.append( pvGetClient( pvName, monitor=options.capture,
                             provider=options.provider, repeat=options.repeat,
+                            showValue=options.showValue,
                             verbose=options.verbose ) )
 
     for client in clients:
-        if options.monitor:
+        if options.capture:
             client.pvMonitor()
         else:
             client.pvGetInitiate()
 
     try:
         while True:
-            if options.monitor:
+            if options.capture:
                 time.sleep(5)
                 continue
             else:
@@ -362,7 +390,7 @@ def main(argv=None):
     for client in clients:
         client.closeSubscription()
     for client in clients:
-        client.writeValues('/tmp/TODO-add-dir-arg')
+        client.writeValues( options.dirpath )
     time.sleep(1)
 
 if __name__ == '__main__':
