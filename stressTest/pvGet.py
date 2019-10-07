@@ -91,11 +91,13 @@ class pvGetClient(object):
         result = self.callback( cbData )
         self._ctxt.disconnect()
         self._noConnectionYet = True
-        assert self._Q
-        try:
-            self._Q.put_nowait( result )
-        except:
-            print( "pvGetCallback %s: Error queuing result" % self._pvName )
+        if result is not None:
+            assert self._Q
+            try:
+                self._Q.put_nowait( result )
+                print( "%s: Added result to queue. %d on queue." % ( self._pvName, self._Q.qsize() ) )
+            except:
+                print( "pvGetCallback %s: Error queuing result" % self._pvName )
         return
 
     def handleResult( self ):
@@ -151,10 +153,10 @@ class pvGetClient(object):
         pvName = self._pvName
         if isinstance( cbData, (RemoteError, Disconnected, Cancelled)):
             if self._noConnectionYet and isinstance( cbData, Disconnected ):
-                return cbData
+                return None
             if not isinstance( cbData, Cancelled ):
                 print( '%s: %s' % ( pvName, cbData ) )
-            return cbData
+            return None
 
         self._noConnectionYet = False
         pvValue = cbData
