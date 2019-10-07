@@ -40,6 +40,7 @@ class pvGetClient(object):
         self._Op = None
         self._noConnectionYet = True
         self._shutDown = False
+        self._provider = provider
         self._throw = throw
         #self._monitor = monitor
         self._repeat = repeat
@@ -65,6 +66,8 @@ class pvGetClient(object):
 
     def pvMonitor( self ):
         # Monitor is is easy as p4p provides it.
+        if self._ctxt is None:
+            self._ctxt = Context( self._provider )
         self._S = self._ctxt.monitor( self._pvName, self.callback, notify_disconnect=True )
         # Above code does this:
         # R = Subscription( self._ctxt, self._pvName, self.callback, notify_disconnect=True )
@@ -78,6 +81,8 @@ class pvGetClient(object):
 
         # Initiate async non-blocking pvGet using a ClientOperation.
         # self.pvGetCallback() handles the response and places it on self._Q
+        if self._ctxt is None:
+            self._ctxt = Context( self._provider )
         raw_get = super( Context, self._ctxt ).get
         try:
             assert self._Op is None
@@ -89,13 +94,14 @@ class pvGetClient(object):
 
     def pvGetCallback( self, cbData ):
         result = self.callback( cbData )
-        self._ctxt.disconnect()
-        self._noConnectionYet = True
+        #self._ctxt.disconnect()
+        #self._noConnectionYet = True
         if result is not None:
             assert self._Q
             try:
                 self._Q.put_nowait( result )
-                print( "%s: Added result to queue. %d on queue." % ( self._pvName, self._Q.qsize() ) )
+                if self._verbose:
+                    print( "%s: Added result to queue. %d on queue." % ( self._pvName, self._Q.qsize() ) )
             except:
                 print( "pvGetCallback %s: Error queuing result" % self._pvName )
         return
@@ -131,7 +137,10 @@ class pvGetClient(object):
                 self._Op.close()
                 self._Op = None
 
-            self._ctxt.disconnect()
+            #self._ctxt.disconnect()
+            #self._noConnectionYet = True
+            self._ctxt.close()
+            self._ctxt = None
             self._noConnectionYet = True
 
             if self._repeat is None:
