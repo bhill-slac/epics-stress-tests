@@ -64,7 +64,6 @@ class pvGetClient(object):
         return self._T.is_alive()
 
     def pvMonitor( self ):
-        print( "pvMonitor %s: calling ctxt.monitor" % ( self._pvName ) );
         # Monitor is is easy as p4p provides it.
         self._S = self._ctxt.monitor( self._pvName, self.callback, notify_disconnect=True )
         # Above code does this:
@@ -79,34 +78,24 @@ class pvGetClient(object):
 
         # Initiate async non-blocking pvGet using a ClientOperation.
         # self.pvGetCallback() handles the response and places it on self._Q
-        print( "pvGetInitiate %s: entry" % ( self._pvName ) );
         raw_get = super( Context, self._ctxt ).get
-        #with self._pvGetPending:
-        if 1:
-            try:
-                if self._Op is not None:
-                    print( "pvGetInitiate tid %s: self._Op is %s" % ( threading.get_ident(), self._Op ) );
-                assert self._Op is None
-                print( "pvGetInitiate %s: calling ctxt.get" % ( self._pvName ) );
-                self._Op = raw_get( self._pvName, self.pvGetCallback )
-                self._pvGetPending.set()
-            except:
-                raise
+        try:
+            assert self._Op is None
+            self._Op = raw_get( self._pvName, self.pvGetCallback )
+            self._pvGetPending.set()
+        except:
+            raise
         return
 
     def pvGetCallback( self, cbData ):
-        print( "pvGetCallback tid %s: callback for %s" % ( threading.get_ident(), self._pvName ) );
         result = self.callback( cbData )
-        print( "pvGetCallback tid %s: disconnect %s" % ( threading.get_ident(), self._pvName ) );
         self._ctxt.disconnect()
         self._noConnectionYet = True
-        #pdb.set_trace()
         assert self._Q
         try:
             self._Q.put_nowait( result )
         except:
             print( "pvGetCallback %s: Error queuing result" % self._pvName )
-
         return
 
     def handleResult( self ):
@@ -130,31 +119,18 @@ class pvGetClient(object):
         return result
 
     def pvGetTimeoutLoop( self, timeout=5.0, throw=False, verbose=True ):
-        # TODO: Why do we get assert failure on _Op w/o this print?
-        #print( "%s: Entering pvGetTimeoutLoop" % self._pvName )
         status = False
         while not self._shutDown:
-            #with self._pvGetPending:
-            if 1:
-                # Wait for something to do.
-                status = self._pvGetPending.wait( timeout=timeout )
-                self._pvGetPending.clear()
-                status = self.handleResult()
+            # Wait for something to do.
+            status = self._pvGetPending.wait( timeout=timeout )
+            self._pvGetPending.clear()
+            status = self.handleResult()
             if self._Op:
-                if self._verbose:
-                    print( '%s tid %d: Closing ClientOperation ...' % ( self._pvName, threading.get_ident() ) )
                 self._Op.close()
                 self._Op = None
 
             self._ctxt.disconnect()
             self._noConnectionYet = True
-
-            #if not status:
-            #	# pvGet timeout
-            #	print( "%s: pvGetTimeoutLoop got status %d: Timeout." % ( self._pvName, status ) )
-
-            if self._shutDown:
-                break
 
             if self._repeat is None:
                 self._shutDown = True
@@ -162,10 +138,10 @@ class pvGetClient(object):
             if self._shutDown:
                 break
             time.sleep( self._repeat )
-            # self._Op should be cleared by handleResult
-            assert self._Op is None
+            
             self.pvGetInitiate()
 
+        # Return on shutdown
         return
 
     def pvName( self ):
@@ -305,7 +281,8 @@ class pvGetClient(object):
                 with open( saveFile, "w" ) as f:
                     if self._verbose or True:
                         print( "Writing %d values to %s ..." % ( len(pvHistory), saveFile ) )
-                    # Skipping json.dump so it matches similar, but more compact, stressTestClient pvCapture output
+                    # Not using json.dump so output matches similar
+                    # stressTestClient pvCapture output
                     #json.dump( pvHistory, f, indent=4 )
                     #continue
                     f.write( '[\n' )
@@ -324,7 +301,8 @@ class pvGetClient(object):
     def closeSubscription( self ):
         self._shutDown	= True
         if self._S is not None:
-            print( "Closing subscription to %s" % self._pvName )
+            if self._verbose:
+                print( "Closing subscription to %s" % self._pvName )
             self._S.close()
             self._S = None
 
