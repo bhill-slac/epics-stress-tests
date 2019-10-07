@@ -358,6 +358,7 @@ def main(argv=None):
                             provider=options.provider, repeat=options.repeat,
                             monitor=options.monitor,
                             showValue=options.showValue,
+                            timeout=options.timeout,
                             verbose=options.verbose ) )
 
     for client in clients:
