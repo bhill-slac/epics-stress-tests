@@ -83,7 +83,8 @@ if [ ! -e "$PVCAPTURE" ]; then
 	exit 1
 fi
 
-PVGET=`which pvGet`
+#PVGET=`which pvGet`
+PVGET=$SCRIPTDIR/pvGet.py
 if [ ! -e "$PVGET" ]; then
 	echo "Error: pvGet not found!"
 	exit 1
