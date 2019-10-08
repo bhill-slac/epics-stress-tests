@@ -37,9 +37,6 @@ readIfFound $SCRIPTDIR/${TEST_APPTYPE}Default.env
 # Read client env again so it can override TEST_APPTYPE defaults
 readIfFound $TEST_TOP/${CLIENT_NAME}.env
 
-# Make sure env is exported
-#source $SCRIPTDIR/exportStressTestEnv.sh
-
 # Setup site specific environment
 if [ -f $SCRIPTDIR/site_setup_env.sh ]; then
 	source $SCRIPTDIR/site_setup_env.sh 
@@ -69,35 +66,20 @@ fi
 LOADSERVER_BIN=`dirname $LOADSERVER`
 LOADSERVER_TOP=`readlink -f $LOADSERVER_BIN/../..`
 
-# Make sure we can find pyProcMgr.py
-#PYPROCMGR=`which pyProcMgr.py`
-PYPROCMGR=$SCRIPTDIR/pyProcMgr.py
-if [ ! -e "$PYPROCMGR" ]; then
-	echo "Error: pyProcMgr.py not found!"
-	exit 1
-fi
-
 PVCAPTURE=`which pvCapture`
 if [ ! -e "$PVCAPTURE" ]; then
 	echo "Error: pvCapture not found!"
 	exit 1
 fi
 
-#PVGET=`which pvGet`
+PYPROCMGR=$SCRIPTDIR/pyProcMgr.py
 PVGET=$SCRIPTDIR/pvGet.py
-if [ ! -e "$PVGET" ]; then
-	echo "Error: pvGet not found!"
-	exit 1
-fi
 
 TEST_DIR=$TEST_HOST_DIR/clients
 mkdir -p $TEST_DIR
 
 # Make sure env is exported
 source $SCRIPTDIR/exportStressTestEnv.sh
-
-# Generate PV list for clients
-#$SCRIPTDIR/genPvLists.sh $TEST_TOP $CLIENT_NAME
 
 # Log start of test
 TEST_LOG=$TEST_DIR/${CLIENT_NAME}.log
